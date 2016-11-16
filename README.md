@@ -25,22 +25,24 @@ db.put('1', {name: "foo"}, function(err) {
     db.put('3', {parentKey: '2', name: "baz"}, function(err) {
       if(err) fail(err);
 
-    // wait for index to finish building
-    setTimeout(function() {
+      // wait for index to finish building
+      setTimeout(function() {
 
-      // stream child-paths of 'foo' recursively
-      var s = tree.stream('foo');
+        // stream child-paths of 'foo' recursively
+        var s = tree.stream('foo');
 
-      s.on('data', function(data) {
-        console.log(data.path, data.key, data.value);
-      });
+        s.on('data', function(data) {
+          console.log(data.path, data.key, data.value);
+        });
 
-    }, 500);
-  })
+      }, 500);
+    });
+  });
 });
 
 ```
 
+See `examples/` for more.
 
 # API
 
