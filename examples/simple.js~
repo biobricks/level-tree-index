@@ -1,0 +1,59 @@
+
+var level = require('level');
+
+var rawdb = level('/tmp/raw', {valueEncoding: 'json'});
+var db = sublevel(rawdb, 'd', {valueEncoding: 'json'});
+var idb = sublevel(rawdb, 'i');
+
+var tree = treeIndexer(db, idb);
+
+function fail(err) {
+  console.error(err);
+  process.exit(0);
+}
+
+db.put('1', {name: "foo"}, function(err) {
+  if(err) fail(err);
+
+  db.put('2', {parentKey: '1', name: "bar"}, function(err) {
+    if(err) fail(err);
+
+    db.put('3', {parentKey: '2', name: "baz"}, function(err) {
+      if(err) fail(err);
+
+      db.put('4', {parentKey: '1', name: "bar2"}, function(err) {
+        if(err) fail(err);
+        
+        console.log("added data");
+        
+        
+        setTimeout(function() {
+          var s = tree.pathStream('foo');
+          s.on('data', function(path) {
+            console.log(path);
+          });
+          
+          s.on('error', function(err) {
+            console.error(err);
+          });
+        }, 500);
+        
+/*
+      tree._firstChild('3', function(err, key, value) {
+        if(err) fail(err);
+
+        console.log("Got:", key, value);
+      });
+
+
+      tree._buildPath(three, function(err, path) {
+        if(err) fail(err);
+
+        console.log("Path:", path);
+      });
+*/
+      });
+    });
+  });
+})
+
