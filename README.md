@@ -181,9 +181,9 @@ Clear and then build the index.
 
 # Async quirks
 
-Note that when you call .put, .del or .batch on your database level-tree-index will not be able to delay the callback so you cannot expect the tree index to be up to date when the callback is called. That is why you see the setTimeout used in the usage example below. You can instead call .put, .del or .batch directly on the level-tree-index instance and your callback will not be called until the index has finished building. This works but is implemented in an inefficient manner and as such is not recommend as the primary mode of using level-tree-index. 
+Note that when you call .put, .del or .batch on your database level-tree-index will not be able to delay the callback so you cannot expect the tree index to be up to date when the callback is called. That is why you see the setTimeout used in the usage example above. You can instead call .put, .del or .batch directly on the level-tree-index instance and your callback will not be called until the index has finished building. This works but if `opts.listen` is set to true then an inefficient and inelegant workaround is used (in order to prevent the change listener from attempting to update the already updated index) which could potentially slow things down.
 
-If you're going to want this functionality most of the time then you should probably use the levelup mode by calling the constructor with `opts.levelup` set to true, though that has its own drawbacks, especially if using `valueEncoding:'json'`. See the constructor API documentation for more.
+If you want to wait for the index to update most of the time then you should probably either set `opts.listen` to false or use the levelup mode by calling the constructor with `opts.levelup` set to true, though that has its own drawbacks, especially if using `valueEncoding:'json'`. See the constructor API documentation for more.
 
 # ToDo
 
