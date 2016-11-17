@@ -14,7 +14,7 @@ var AbstractLevelDOWN = require('abstract-leveldown').AbstractLevelDOWN;
 // hash an operation
 function hash(type, key, value) {
 
-  // yes sha256 is slow but really not much slower than anything else in node
+  // yes sha256 is slow but really not much slower than any other hash in node
   // https://github.com/hex7c0/nodejs-hash-performance
   var h = crypto.createHash('sha256');
   
@@ -824,7 +824,6 @@ function treeIndexer(db, idb, opts) {
 
       db[f] = self[f].bind(self);
     }
-    
 
     return db;
   };

@@ -11,6 +11,18 @@
     "type": "git",
     "url": "git://github.com/biobricks/level-tree-index.git"
   },
+  "keywords": [
+    "leveldb",
+    "level",
+    "levelup",
+    "index",
+    "indexer",
+    "tree",
+    "nested",
+    "hierarchy",
+    "stream",
+    "streaming"
+  ],
   "dependencies": {
     "abstract-leveldown": "^2.6.1",
     "async": "^2.1.2",
