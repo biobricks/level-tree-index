@@ -1,11 +1,8 @@
 
-var level = require('level');
 var sublevel = require('subleveldown');
-var uuid = require('uuid').v4;
-var fs = require('fs-extra');
+var memdb = require('memdb');
 
-var dbname = '/tmp/' + uuid();
-var rawdb = level(dbname);
+var rawdb = memdb();
 var db = sublevel(rawdb, 'd', {valueEncoding: 'json'});
 var idb = sublevel(rawdb, 'i');
 var treeIndexer = require('../index.js');
@@ -13,7 +10,6 @@ var treeIndexer = require('../index.js');
 var tree = treeIndexer(db, idb);
 
 function cleanup(err) {
-  fs.removeSync(dbname);
   if(err) {
     console.error(err);
     process.exit(1);

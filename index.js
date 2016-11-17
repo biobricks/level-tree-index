@@ -20,9 +20,14 @@ function concat(a, b) {
 }
 
 // Join an array of either buffers or strings with the optional seperator
+// Output type (buffer or string) will be based on type of first array element
+// unless array is of zero length in which case output type is based on sep type
 // Seperator can be a string or a buffer
 function join(a, sep) {
-  if(a.length <= 0) throw new Error("cannot reliably join a zero length array since it's impossible to determine whether output should be buffer or string");
+  if(a.length <= 0) {
+    if(Buffer.isBuffer(sep)) return new Buffer('');
+    return '';
+  }
 
   if(typeof a[0] === 'string') {
     if(Buffer.isBuffer(sep)) sep = sep.toString();
@@ -231,9 +236,8 @@ function treeIndexer(db, idb, opts) {
   };
 
 
-  // TODO guard against loops
   // Takes a value as input and builds its path by recursively
-  // looking up the parent_key
+  // looking up the parent key
   // We could look up the path of the parent in the index itself,
   // which would be faster since it's only one operation, but then 
   // e.g. adding an object and then immediately adding a child
@@ -368,14 +372,19 @@ function treeIndexer(db, idb, opts) {
     this.db.get(key, function(err, value) {
       if(err) return cb(err);
 
-      var parentKey = self.parentKey(value);
+      var parentKey = self._getParentKey(value);
+
+      if(parentKey === undefined) return cb(null, undefined);
+
       self.db.get(parentKey, cb);
     });
   };
 
   // get parent value given a value
   this.parentFromValue = function(value, cb) {
-    var parentKey = this.parentKey(value);
+    var parentKey = this._getParentKey(value);
+
+    if(parentKey === undefined) return cb(null, undefined);
 
     this.db.get(parentKey, cb);
   };
@@ -387,22 +396,22 @@ function treeIndexer(db, idb, opts) {
     this.db.get(key, function(err, value) {
       if(err) return cb(err);
 
-      var parentKey = self.parentKey(value);
-      self.rdb.get(parentKey, cb);
+      self.parentPathFromValue(value, cb);
     });    
   };
 
   // get parent path given a value
   this.parentPathFromValue = function(value, cb) {
-    var parentKey = this.parentKey(value);
+    var parentKey = this._getParentKey(value);
 
+    if(parentKey === undefined) return cb(null, undefined);
     this.rdb.get(parentKey, cb);
   };
 
   // get parent value given a path
   this.parentFromPath = function(path, cb) {
     var parentPath = this.parentPathFromPath(path);
-
+    if(parentPath === undefined) return cb(null, undefined, undefined);
     this.get(parentPath, cb);
   };
 
@@ -436,6 +445,10 @@ function treeIndexer(db, idb, opts) {
 
     return res;
   };
+
+  this.waitFor = function(path, opts, cb) {
+    // TODO
+  };
   
   this.children = function(path, opts, cb) {
     if(typeof opts === 'function') {
@@ -459,7 +472,7 @@ function treeIndexer(db, idb, opts) {
     });
   };
   
-  this.childrenFromKey = function(value, opts, cb) {
+  this.childrenFromKey = function(key, opts, cb) {
     if(typeof opts === 'function') {
       cb = opts;
       opts = {};
@@ -476,7 +489,7 @@ function treeIndexer(db, idb, opts) {
     // TODO
   };  
 
-  this.siblingsFromValue = function(value, cb) {
+  this.siblingsFromKey = function(key, cb) {
     // TODO
   };
     

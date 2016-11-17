@@ -12,10 +12,21 @@ base(function(err, db, tree, cb) {
   tree.parentFromPath('foo.bar.baz', function(err, key, value) {
     if(err) return cb(err);
 
-    console.log("key:", key, "value:", value);
+    console.log("parent of baz: key:", key, "value:", value);
+    
+    tree.parentFromPath('foo', function(err, key, value) {
+      if(err) return cb(err);
+      
+      console.log("parent of foo: key:", key, "value:", value);
 
-    cb();
+      tree.parentPathFromValue({}, function(err, path) {
+        if(err) return cb(err);
+
+        console.log("parent path of foo:", path);
+
+        cb();
+      });
+    });
   });
-  
 });
 

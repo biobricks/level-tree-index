@@ -1,5 +1,5 @@
 
-A tree structure index for leveldb.
+A streaming tree structure index for leveldb.
 
 Reference every value in your leveldb to its parent, e.g. by setting value.parentKey to the key of the parent, then level-tree-index will keep track of the full path for each value and allow you to look up parents and children and stream the entire tree or a part thereof.
 
@@ -7,7 +7,7 @@ This is useful for implementing e.g. nested comments.
 
 level-tree-index works for all keyEncodings and works automatically for the json valueEncoding and for other valueEncodings if you provide custom functions for the opts.pathProp and opts.parentProp options. level-tree-index works equally well with string and buffer paths.
 
-Note that level-tree-index has no way to delay callbacks when calling e.g. .put on your database, so when you that .put on your database then you cannot expect the tree index to immediately be up to date. It wouldn't be too difficult to turn this module into a proper leveldown/levelup using abstract-leveldown, which would allow delaying of callbacks until the index has finished updating.
+Note that level-tree-index has no way to delay callbacks when calling e.g. .put on your database, so when you change your database then you cannot expect the tree index to immediately be up to date. It wouldn't be too difficult to turn this module into a leveldown/levelup instance using abstract-leveldown, which would allow delaying of callbacks until the index has finished updating.
 
 # Usage
 
