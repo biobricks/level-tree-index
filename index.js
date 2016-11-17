@@ -204,10 +204,11 @@ function treeIndexer(db, idb, opts) {
     cb = cb || function(){};
     
     var self = this;
-    
+
     this._buildPath(value, function(err, path) {
       if(err) return cb(err);
       
+
       // was this a move? (does it already exist in index?
       self.rdb.get(key, function(revErr, data) {
         if(revErr && !revErr.notFound) return cb(revErr)
@@ -421,6 +422,7 @@ function treeIndexer(db, idb, opts) {
 
     this.idb.get(path, function(err, key) {
       if(err) return cb(err);
+
       self.db.get(key, function(err, value) {
         if(err) return cb(err);
         cb(null, key, value);

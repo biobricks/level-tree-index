@@ -15,7 +15,6 @@ level-tree-index automatically keeps the tree updated as you add, change or dele
 // db contains your data and idb is used to store the index
 var tree = treeIndexer(db, idb);
 
-// 
 db.put('1', {name: "foo"}, function(err) {
   if(err) fail(err);
 
@@ -187,7 +186,7 @@ If you're going to want this functionality most of the time then you should prob
 
 ## Before version 1.0
 
-* Implement unit tests
+* Implement more unit tests
 
 ## Extras
 
