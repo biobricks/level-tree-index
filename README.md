@@ -56,6 +56,7 @@ opts:
 pathProp: 'name' // property used to construct the path
 parentProp: 'parentKey' // property that references key of parent
 sep: '.', // path separator
+listen: true, // listen for changes on db and update index automatically
 levelup: false // if true, returns a levelup instance instead
 ```
 
@@ -63,9 +64,11 @@ Both `pathProp` and `parentProp` can be either a string, a buffer or a function.
 
 If a function is used then the function will be passed a value from your database as the only argument. The `pathProp` function is expected to return a string or buffer that will be used to construct the path by joining multiple returned `pathProp` values with the `opts.sep` value as separator. The `parentProp` function is expected to return the key in `db` of the parent.
 
-`opts.sep` can be a buffer of a string.
+`opts.sep` can be a buffer of a string and is used as a separator to construct the path to each node in the tree.
 
-If levelup is true then a levelup instance will be returned with all of the standard levelup API + the level-tree-index API. All calls to .put, .del or .batch will 
+If `opts.listen` is true then level-tree-index will listen to operations on db and automatically update the index. Otherwise the index will only be updated when .put/.del/batch is called directly on the level-tree-index instance. This option is ignored when `opts.levelup` is true.
+
+If `opts.levelup` is true then instead of a level-tree-index instance a levelup instance will be returned with all of the standard levelup API + the level-tree-index API. All calls to .put, .del or .batch will operate on the database given as the `db` argument and only call their callbacks once the tree index has been updated.
 
 Limitations when using `levelup:true`:
 
@@ -190,7 +193,7 @@ If you're going to want this functionality most of the time then you should prob
 
 ## Extras
 
-* Add option for levelup:true mode that sets whether to wait for the index to update before calling back or not, both per default and per .put/.del/.batch operation.
+* Add options for levelup:true mode that sets whether to wait for the index to update before calling back or not, both per default and per .put/.del/.batch operation.
 
 # License and copyright
 

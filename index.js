@@ -116,6 +116,7 @@ function treeIndexer(db, idb, opts) {
     pathProp: 'name', // property used to construct the path
     parentProp: 'parentKey', // property that references key of parent
     sep: '.', // path separator
+    listen: true, // listen for changes on db and update index automatically
     levelup: false // if true, return a levelup wrapper
   }, opts || {});
 
@@ -135,7 +136,7 @@ function treeIndexer(db, idb, opts) {
   this.idb = sublevel(idb, 'i'); // the index db
   this.rdb = sublevel(idb, 'r'); // the reverse lookup db
 
-  if(!this.opts.levelup) {
+  if(!this.opts.levelup || !this.opts.listen) {
     this.c = changes(this.db);
     this.c.on('data', function(change) {
       if(this._shouldIgnore(change)) return;
@@ -690,7 +691,10 @@ function treeIndexer(db, idb, opts) {
     }
     if(!cb) return this.db.put(key, value, opts);
     
-    this._ignore('put', key, value);
+    // if listening, make listener ignore this next put
+    if(this.opts.listen) {
+      this._ignore('put', key, value);
+    }
 
     var self = this;
     this.db.put(key, value, opts, function(err) {
@@ -707,8 +711,11 @@ function treeIndexer(db, idb, opts) {
       opts = {};
     }
     if(!cb) return this.db.del(key, opts);
-    
-    this._ignore('del', key, value);
+
+    // if listening, make listener ignore this next del
+    if(this.opts.listen) {    
+      this._ignore('del', key, value);
+    }
 
     var self = this;
     this.db.del(key, opts, function(err) {
@@ -725,10 +732,13 @@ function treeIndexer(db, idb, opts) {
     }
     if(!cb) return this.db.batch(ops, opts);
 
-    var i, op;
-    for(i=0; i < ops.length; i++) {
-      op = ops[i];
-      this._ignore(op.type, op.key, op.value);
+    // if listening, make listener ignore these next operations
+    if(this.opts.listen) {    
+      var i, op;
+      for(i=0; i < ops.length; i++) {
+        op = ops[i];
+        this._ignore(op.type, op.key, op.value);
+      }
     }
 
     var self = this;
