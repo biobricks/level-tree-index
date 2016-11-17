@@ -487,7 +487,7 @@ function treeIndexer(db, idb, opts) {
   this.parentFromPath = function(path, cb) {
     var parentPath = this.parentPathFromPath(path);
     if(parentPath === undefined) return cb(null, undefined, undefined);
-    this.get(parentPath, cb);
+    this.getFromPath(parentPath, cb);
   };
 
   // get parent path given a path
