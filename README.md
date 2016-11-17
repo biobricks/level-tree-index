@@ -181,7 +181,7 @@ Clear and then build the index.
 
 Note that when you call .put, .del or .batch on your database level-tree-index will not be able to delay the callback so you cannot expect the tree index to be up to date when the callback is called. That is why you see the setTimeout used in the usage example below. You can instead call .put, .del or .batch directly on the level-tree-index instance and your callback will not be called until the index has finished building. This works but is implemented in an inefficient manner and as such is not recommend as the primary mode of using level-tree-index. 
 
-If you're going to want this functionality most of the time then you should implement a leveldown wrapper for level-tree-index using abstract-leveldown. This style of implementation would require all operations to be performed directly on the leveldown wrapper, which is somewhat dangerous as any bug in level-tree-index or the wrapper would could cause database changes to fail. The current implementation can be used without any danger of interfering with writes to your primary database. 
+If you're going to want this functionality most of the time then you should probably use the levelup mode by calling the constructor with `opts.levelup` set to true, though that has its own drawbacks, especially if using `valueEncoding:'json'`. See the constructor API documentation for more.
 
 # License and copyright
 
