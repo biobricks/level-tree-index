@@ -183,6 +183,16 @@ Note that when you call .put, .del or .batch on your database level-tree-index w
 
 If you're going to want this functionality most of the time then you should probably use the levelup mode by calling the constructor with `opts.levelup` set to true, though that has its own drawbacks, especially if using `valueEncoding:'json'`. See the constructor API documentation for more.
 
+# ToDo
+
+## Before version 1.0
+
+* Implement unit tests
+
+## Extras
+
+* Add option for levelup:true mode that sets whether to wait for the index to update before calling back or not, both per default and per .put/.del/.batch operation.
+
 # License and copyright
 
 License: AGPLv3
