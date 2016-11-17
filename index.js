@@ -1,11 +1,35 @@
 
+var crypto = require('crypto');
 var through = require('through2');
 var sublevel = require('subleveldown');
 var xtend = require('xtend');
 var bufferReplace = require('buffer-replace');
 var bufferSplit = require('buffer-split');
 var changes = require('level-changes');
+var async = require('async');
+var util = require('util')
+var levelup = require('levelup')
+var AbstractLevelDOWN = require('abstract-leveldown').AbstractLevelDOWN;
 
+// hash an operation
+function hash(type, key, value) {
+
+  // yes sha256 is slow but really not much slower than anything else in node
+  // https://github.com/hex7c0/nodejs-hash-performance
+  var h = crypto.createHash('sha256');
+  
+  h.update(type);
+  h.update(key);
+  if(value) {
+    if(typeof value === 'object' && !Buffer.isBuffer(value)) {
+      h.update(JSON.stringify(value));
+    } else {
+      h.update(value);
+    }
+  }
+
+  return h.digest('base64');
+}
 
 function concat(a, b) {
   if(typeof a === 'string') {
@@ -88,31 +112,72 @@ function resolvePropPath(obj, path) {
 
 
 function treeIndexer(db, idb, opts) {
-  if(!(this instanceof treeIndexer)) return new treeIndexer(db, idb, opts);
+  opts = xtend({
+    pathProp: 'name', // property used to construct the path
+    parentProp: 'parentKey', // property that references key of parent
+    sep: '.', // path separator
+    levelup: false // if true, return a levelup wrapper
+  }, opts || {});
+
+  if(!(this instanceof treeIndexer)) {
+    if(!opts.levelup) {
+      return new treeIndexer(db, idb, opts);
+    }
+    var tree = new treeIndexer(db, idb, opts);
+    return tree.levelup();
+  }
+
+  this.opts = opts;
+
+  if(this.opts.sep.length < 1) throw new Error("Seperator cannot be zero length");
 
   this.db = db;
   this.idb = sublevel(idb, 'i'); // the index db
   this.rdb = sublevel(idb, 'r'); // the reverse lookup db
 
-  this.opts = xtend({
-    pathProp: 'name', // property used to construct the path
-    parentProp: 'parentKey', // property that references key of parent
-    sep: '.' // path separator
-  }, opts || {});
+  if(!this.opts.levelup) {
+    this.c = changes(this.db);
+    this.c.on('data', function(change) {
+      if(this._shouldIgnore(change)) return;
+      
+      if(change.type === 'put') {
+        this._onPut(change.key, change.value);
+      } else { // del
+        this._onDel(change.key);
+      }
+    }.bind(this));
+  }    
 
-  if(this.opts.sep.length < 1) throw new Error("Seperator cannot be zero length");
+  this._ignoreList = {};
+  this._ignoreCount = 0;
 
-  this.indexes = {};
-
-  this.c = changes(this.db);
-  this.c.on('data', function(change) {
-    if(change.type === 'put') {
-      this._onPut(change.key, change.value);
-    } else { // del
-      this._onDel(change.key);
+  // Ignore the next time this operation occurs.
+  // Used by this._put, this._del and this._batch
+  this._ignore = function(type, key, value) {
+    var h = hash(type, key, value);
+    if(this._ignoreList[h]) {
+      this._ignoreList[h]++;
+    } else {
+      this._ignoreList[h] = 1;
     }
-  }.bind(this));
+    this._ignoreCount++;
+  };
 
+  // check if we should ignore this operation
+  // and remove from ignore list
+  this._shouldIgnore = function(op) {
+    if(this._ignoreCount <= 0) return;
+    var h = hash(op.type, op.key, op.value);
+    if(this._ignoreList[h]) {
+      if(this._ignoreList[h] === 1) {
+        delete this._ignoreList[h];
+      } else {
+        this._ignoreList[h]--;
+      }
+      this._ignoreCount--;
+    }
+  };
+  
   this._resolvePropPath = function(value, pathOrFunc) {
     if(typeof pathOrFunc === 'function') return pathOrFunc(value);
 
@@ -144,24 +209,29 @@ function treeIndexer(db, idb, opts) {
       if(err) return cb(err);
       
       // was this a move? (does it already exist in index?
-      self.rdb.get(key, function(err, data) {
-        if(err && !err.notFound) return cb(err)
+      self.rdb.get(key, function(revErr, data) {
+        if(revErr && !revErr.notFound) return cb(revErr)
         
-        self.idb.put(path, key);
-        self.rdb.put(key, path);
-        
-        // if there was no reverse lookup entry then this was a new put
-        // so we are done
-        if(err && err.notFound) return cb(err);
-        
-        // this was a move so we need to delete the previous entry in idb
-        var prevPath = data.value;
-        self.idb.del(data.value, function(err) {
+        async.parallel([function(cb) {
+          self.idb.put(path, key, cb);
+        }, function(cb) {
+          self.rdb.put(key, path, cb);
+        }], function(err) {
           if(err) return cb(err);
           
-          // since it was a move there may be children and grandchildren
-          self._moveChildren(oldPath, newPath, cb);          
-        })
+          // if there was no reverse lookup entry then this was a new put
+          // so we are done
+          if(revErr && revErr.notFound) return cb();
+          
+          // this was a move so we need to delete the previous entry in idb
+          var prevPath = data.value;
+          self.idb.del(data.value, function(err) {
+            if(err) return cb(err);
+            
+            // since it was a move there may be children and grandchildren
+            self._moveChildren(oldPath, newPath, cb);          
+          })
+        });
       });
     });
   };
@@ -174,18 +244,23 @@ function treeIndexer(db, idb, opts) {
     this.rdb.get(key, function(err, path) {
       if(err) return;
       
-      self.idb.del(path);
-      self.rdb.del(key);
-      
-      var newPath;
-      if(Buffer.isBuffer(path)) {
-        newPath = new Buffer();
-      } else {
-        newPath = '';
-      }
-      
-      // move children to be root nodes
-      self._moveChildren(path, newPath);
+      async.parallel([function(cb) {
+        self.idb.del(path, cb);
+      }, function(cb) {
+        self.rdb.del(key, cb);
+      }], function(err) {
+        if(err) return cb(err);
+
+        var newPath;
+        if(Buffer.isBuffer(path)) {
+          newPath = new Buffer();
+        } else {
+          newPath = '';
+        }
+        
+        // move children to be root nodes
+        self._moveChildren(path, newPath, cb);
+      });
     });
   };
 
@@ -340,8 +415,8 @@ function treeIndexer(db, idb, opts) {
     }.bind(this));
   };
 
-  // get value from tree path
-  this.get = function(path, cb) {
+  // get key and value from tree path
+  this.getFromPath = function(path, cb) {
     var self = this;
 
     this.idb.get(path, function(err, key) {
@@ -446,10 +521,6 @@ function treeIndexer(db, idb, opts) {
     return res;
   };
 
-  this.waitFor = function(path, opts, cb) {
-    // TODO
-  };
-  
   this.children = function(path, opts, cb) {
     if(typeof opts === 'function') {
       cb = opts;
@@ -610,6 +681,141 @@ function treeIndexer(db, idb, opts) {
     return this.stream(parentPath, opts);
   };
 
+  this.put = function(key, value, opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    if(!cb) return this.db.put(key, value, opts);
+    
+    this._ignore('put', key, value);
+
+    var self = this;
+    this.db.put(key, value, opts, function(err) {
+      if(err) return cb(err);
+
+      self._onPut(key, value, cb);
+    });
+  };
+
+
+  this.del = function(key, opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    if(!cb) return this.db.del(key, opts);
+    
+    this._ignore('del', key, value);
+
+    var self = this;
+    this.db.del(key, opts, function(err) {
+      if(err) return cb(err);
+
+      self._onDel(key, cb);
+    });
+  };
+
+  this.batch = function(ops, opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    if(!cb) return this.db.batch(ops, opts);
+
+    var i, op;
+    for(i=0; i < ops.length; i++) {
+      op = ops[i];
+      this._ignore(op.type, op.key, op.value);
+    }
+
+    var self = this;
+    this.db.batch(ops, opts, function(err) {
+      if(err) return cb(err);
+
+      async.each(ops, function(op, cb) {
+        if(op.type === 'put') {
+          self._onPut(op.key, op.value, cb)
+        } else { // del
+          self._onDel(op.key, cb)
+        }
+      }, cb);
+    });
+  };
+
+  this.levelup = function() {
+    var self = this;
+
+    function TreeLevelDown(location, opts) {
+      this.opts = opts;
+      AbstractLevelDOWN.call(this, '', opts)
+    }
+    util.inherits(TreeLevelDown, AbstractLevelDOWN);
+
+    TreeLevelDown.prototype._serializeKey = function(key) {
+      return key;
+    }
+
+    TreeLevelDown.prototype._serializeValue = function(value) {
+      return value;
+    }
+
+    TreeLevelDown.prototype._put = function(key, value, opts, cb) {
+      self.db.put(key, value, opts, function(err) {
+        if(err) return cb(err);
+
+        self._onPut(key, value, cb);
+      });
+    };
+
+    TreeLevelDown.prototype._del = function(key, opts, cb) {
+      self.db.del(key, opts, function(err) {
+        if(err) return cb(err);
+        
+        self._onDel(key, cb);
+      });
+    };
+
+    TreeLevelDown.prototype._get = function(key, opts, cb) {
+      self.db.get(key, opts, cb);
+    };
+
+    TreeLevelDown.prototype._batch = function(ops, opts, cb) {
+      if(!ops) throw new Error("Chained batch form not implemented");
+
+      self.db.batch(ops, opts, function(err) {
+        if(err) return cb(err);
+        
+        async.each(ops, function(op, cb) {
+          if(op.type === 'put') {
+            self._onPut(op.key, op.value, cb)
+          } else { // del
+            self._onDel(op.key, cb)
+          }
+        }, cb);
+      });
+    };
+    
+    var dbOpts = xtend(self.db.options, {
+      db: function (location) { return new TreeLevelDown(location, dbOpts) }
+    });
+
+    var db = levelup('', dbOpts)
+
+    // Expose all public level-tree-index functions via levelup instance
+    // but skip functions that would over-write the normal levelup API
+    var f;
+    for(f in self) {
+      if(typeof self[f] !== 'function') continue;
+      if(f[0] === '_') continue;
+      if(db[f]) continue; // don't over-write anything
+
+      db[f] = self[f].bind(self);
+    }
+    
+
+    return db;
+  };
 }
 
 module.exports = treeIndexer;
