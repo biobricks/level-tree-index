@@ -140,7 +140,6 @@ function treeIndexer(db, idb, opts) {
     this.c = changes(this.db);
     this.c.on('data', function(change) {
       if(this._shouldIgnore(change)) return;
-      
       if(change.type === 'put') {
         this._onPut(change.key, change.value);
       } else { // del
@@ -167,8 +166,10 @@ function treeIndexer(db, idb, opts) {
   // check if we should ignore this operation
   // and remove from ignore list
   this._shouldIgnore = function(op) {
+
     if(this._ignoreCount <= 0) return;
     var h = hash(op.type, op.key, op.value);
+
     if(this._ignoreList[h]) {
       if(this._ignoreList[h] === 1) {
         delete this._ignoreList[h];
@@ -176,7 +177,9 @@ function treeIndexer(db, idb, opts) {
         this._ignoreList[h]--;
       }
       this._ignoreCount--;
+      return true;
     }
+    return false;
   };
   
   this._resolvePropPath = function(value, pathOrFunc) {
@@ -205,7 +208,6 @@ function treeIndexer(db, idb, opts) {
     cb = cb || function(){};
     
     var self = this;
-
     this._buildPath(value, function(err, path) {
       if(err) return cb(err);
       
@@ -226,12 +228,13 @@ function treeIndexer(db, idb, opts) {
           if(revErr && revErr.notFound) return cb();
           
           // this was a move so we need to delete the previous entry in idb
-          var prevPath = data.value;
-          self.idb.del(data.value, function(err) {
+          var prevPath = data;
+
+          self.idb.del(data, function(err) {
             if(err) return cb(err);
             
             // since it was a move there may be children and grandchildren
-            self._moveChildren(oldPath, newPath, cb);          
+            self._moveChildren(prevPath, path, cb);          
           })
         });
       });

@@ -12,9 +12,9 @@ var tree = treeIndexer(db, idb);
 function cleanup(err) {
   if(err) {
     console.error(err);
-    process.exit(1);
+//    process.exit(1);
   }
-  process.exit(0);
+//  process.exit(0);
 }
 
 module.exports = function(cb) {
@@ -32,22 +32,19 @@ and then gets a stream of the child-paths of foo
 
 */
 
-  db.put('1', {name: "foo"}, function(err) {
+  tree.put('1', {name: "foo"}, function(err) {
     if(err) return cb(err);
     
-    db.put('2', {parentKey: '1', name: "bar"}, function(err) {
+    tree.put('2', {parentKey: '1', name: "bar"}, function(err) {
       if(err) return cb(err);
       
-      db.put('3', {parentKey: '2', name: "baz"}, function(err) {
+      tree.put('3', {parentKey: '2', name: "baz"}, function(err) {
         if(err) return cb(err);
         
-        db.put('4', {parentKey: '1', name: "cat"}, function(err) {
+        tree.put('4', {parentKey: '1', name: "cat"}, function(err) {
           if(err) return cb(err);
           
-          // wait for index to finish building
-          setTimeout(function() {
-            cb(err, db, tree, cleanup);
-          }, 500);
+          cb(err, db, tree, cleanup);
           
         });
       });
