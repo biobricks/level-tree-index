@@ -196,6 +196,14 @@ Note: You will likely want to .clear the index first or call .rebuild instead.
 
 Clear and then build the index.
 
+## .put(key, value, [opts], cb)
+
+If you need to wait for the tree index to update after a `.put` operation then you can use .put directly on the level-tree-index instance and give it a callback. Calling `.put` this way is much less efficient so if you are planning to use this feature most of the time then you should look into using level-tree-index with the `levelup:true` option instead.
+
+## .del(key, [opts], cb)
+
+Allows you to wait for the tree index to finish building using a callback. Same as `.put` above but for deletion.
+
 # Async quirks
 
 Note that when you call .put, .del or .batch on your database level-tree-index will not be able to delay the callback so you cannot expect the tree index to be up to date when the callback is called. That is why you see the setTimeout used in the usage example above. You can instead call .put, .del or .batch directly on the level-tree-index instance and your callback will not be called until the index has finished building. This works but if `opts.listen` is set to true then an inefficient and inelegant workaround is used (in order to prevent the change listener from attempting to update the already updated index) which could potentially slow things down.
