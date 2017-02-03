@@ -56,6 +56,7 @@ opts:
 pathProp: 'name' // property used to construct the path
 parentProp: 'parentKey' // property that references key of parent
 sep: '.', // path separator
+ignore: false, // set to a function to selectively ignore 
 listen: true, // listen for changes on db and update index automatically
 levelup: false // if true, returns a levelup instance instead
 ```
@@ -65,6 +66,22 @@ Both `pathProp` and `parentProp` can be either a string, a buffer or a function.
 If a function is used then the function will be passed a value from your database as the only argument. The `pathProp` function is expected to return a string or buffer that will be used to construct the path by joining multiple returned `pathProp` values with the `opts.sep` value as separator. The `parentProp` function is expected to return the key in `db` of the parent.
 
 `opts.sep` can be a buffer of a string and is used as a separator to construct the path to each node in the tree.
+
+`opts.ignore` can be set to a function which will receive the key and value of each added for each change and if it returns something truthy then that value will be ignored by the tree indexer, e.g:
+
+```
+// ignore items where the .name property starts with an underscore
+ignore: function(key, value) {
+  if(typeof value === 'object') {
+    if(typeof value.name === 'string') {
+      if(value.name[0] === '_') {
+        return true;
+      }     
+    }
+  }
+  return false;
+} 
+```
 
 If `opts.listen` is true then level-tree-index will listen to operations on db and automatically update the index. Otherwise the index will only be updated when .put/.del/batch is called directly on the level-tree-index instance. This option is ignored when `opts.levelup` is true.
 

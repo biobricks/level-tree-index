@@ -204,9 +204,20 @@ function treeIndexer(db, idb, opts) {
     return this._resolvePropPath(val, this.opts.pathProp);
   };
 
+  this._shouldIgnore = function(key, value) {
+    if(typeof this.opts.ignore === 'function') {
+      if(this.opts.ignore(key, value)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   this._onPut = function(key, value, cb) {
     cb = cb || function(){};
     
+    if(this._shouldIgnore(key, value)) return cb();
+
     var self = this;
     this._buildPath(value, function(err, path) {
       if(err) return cb(err);
@@ -245,6 +256,8 @@ function treeIndexer(db, idb, opts) {
     cb = cb || function(){};
 
     var self = this;
+
+    if(this._shouldIgnore(key, value)) return cb();
 
     this.rdb.get(key, function(err, path) {
       if(err) return;
