@@ -181,7 +181,7 @@ function treeIndexer(db, idb, opts) {
     }
     return false;
   };
-  
+
   this._resolvePropPath = function(value, pathOrFunc) {
     if(typeof pathOrFunc === 'function') return pathOrFunc(value);
 
@@ -204,9 +204,18 @@ function treeIndexer(db, idb, opts) {
     return this._resolvePropPath(val, this.opts.pathProp);
   };
 
-  this._shouldIgnore = function(key, value) {
+  this._ignoreInput = function(key, value) {
     if(typeof this.opts.ignore === 'function') {
       if(this.opts.ignore(key, value)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  this._ignoreOutput = function(opts, data) {
+    if(typeof opts.ignore === 'function') {
+      if(opts.ignore(data)) {
         return true;
       }
     }
@@ -216,7 +225,7 @@ function treeIndexer(db, idb, opts) {
   this._onPut = function(key, value, cb) {
     cb = cb || function(){};
     
-    if(this._shouldIgnore(key, value)) return cb();
+    if(this._ignoreInput(key, value)) return cb();
 
     var self = this;
     this._buildPath(value, function(err, path) {
@@ -588,9 +597,12 @@ function treeIndexer(db, idb, opts) {
     return this._childStream();
   };
   
+  this._chec
+
   this.stream = function(parentPath, opts) {
     opts = xtend({
       depth: 0, // how many (grand)children deep to go. 0 means infinite
+      ignore: false, // optional function that returns true for values to ignore
       paths: true, // output the path for each child
       keys: true, // output the key for each child
       values: true // output the value for each child
@@ -610,7 +622,7 @@ function treeIndexer(db, idb, opts) {
 
     var self = this;
 
-    var depth;
+    var depth, o;
     var out = through.obj(function(data, enc, cb) {
 
       var path = data.key;
@@ -624,17 +636,27 @@ function treeIndexer(db, idb, opts) {
       
       if(!opts.values) {
         if(opts.paths && opts.keys) {
-          this.push({
+          o = {
             path: path,
             key: key
-          });
+          };
+          if(self._ignoreOutput(opts, o)) {
+            return cb();
+          }
+          this.push(o);
           return cb();
         }
         if(opts.keys) {
+          if(self._ignoreOutput(opts, key)) {
+            return cb();
+          }
           this.push(key)
           return cb();
         }
         if(opts.paths) {
+          if(self._ignoreOutput(opts, path)) {
+            return cb();
+          }
           this.push(path)
           return cb();
         }
@@ -644,11 +666,14 @@ function treeIndexer(db, idb, opts) {
         if(err) return cb(err);
         
         if(!opts.paths && !opts.keys) {
+          if(self._ignoreOutput(opts, value)) {
+            return cb();
+          }
           this.push(value);
           return cb();
         }
         
-        var o = {
+        o = {
           value: value
         };
         
@@ -657,6 +682,10 @@ function treeIndexer(db, idb, opts) {
         }
         if(opts.keys) {
           o.key = key;
+        }
+
+        if(self._ignoreOutput(opts, o)) {
+          return cb();
         }
         this.push(o);
         return cb();

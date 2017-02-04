@@ -157,7 +157,7 @@ Callback: `cb(err, childArray)`
 
 ## .stream(parentPath, [opts])
 
-If parentPath is falsy then the entire tree will be streamed to the specified depth.
+Stream tree index paths starting from `parentPath`. If parentPath is falsy then the entire tree will be streamed to the specified depth.
 
 Opts:
 
@@ -165,20 +165,23 @@ Opts:
 depth: 0, // how many (grand)children deep to go. 0 means infinite
 paths: true, // output the path for each child
 keys: true, // output the key for each child
-values: true // output the value for each child
+values: true, // output the value for each child
+ignore: false // optional function that returns true for values to ignore
 ```
 
-If more than one of opts.paths, opts.keys and opts.values is true then the stream will output objects with these as properties.
+If more than one of `opts.paths`, `opts.keys` and `opts.values` is true then the stream will output objects with these as properties.
 
-## .streamPaths(parentPath, [opts])
+`opts.ignore` can be set to a function. This function will receive whatever the stream is about to output (which depends on `opts.paths`, `opts.keys` and `opts.values`) and if the function returns true then those values will not be emitted by the stream.
+
+## .pathStream(parentPath, [opts])
 
 Same as .stream with only opts.paths set to true.
 
-## .streamKeys(parentPath, [opts])
+## .keyStream(parentPath, [opts])
 
 Same as .stream with only opts.keys set to true.
 
-## .streamValues(parentPath, [opts])
+## .valueStream(parentPath, [opts])
 
 Same as .stream with only opts.values set to true.
 
