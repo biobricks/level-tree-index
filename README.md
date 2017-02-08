@@ -213,6 +213,13 @@ Note that when you call .put, .del or .batch on your database level-tree-index w
 
 If you want to wait for the index to update most of the time then you should probably either set `opts.listen` to false or use the levelup mode by calling the constructor with `opts.levelup` set to true, though that has its own drawbacks, especially if using `valueEncoding:'json'`. See the constructor API documentation for more.
 
+## Technical explanation
+
+I normal operation (opts.levelup == false) level-tree-index will listen for any changes on your database and update its index every time a change occurs on the database. This is implemented using leveup change event listeners which run after the database operation has already completed. 
+
+When running `.put` or `.del` directly on level-tree-index the operation is performed on the underlying database, the tree index is updated and then the callback is called. Since we can't turn off the change event listeners for a specific operation, level-tree-index has to remember the operations performed directly through `.put` or `.del` on the level-tree-index instance such that the change event listener can ignore them to prevent the tree-index update operation from being called twice. This is done by hashing the entire operation, saving the hash and then checking the hash of each operation picked up by the change event listeners agains the saved hash. This is obviously inefficient. If this feature is never used then nothing is ever hashed nor compared so performance will not be impacted.
+
+
 # ToDo
 
 ## Before version 1.0
