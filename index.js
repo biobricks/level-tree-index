@@ -88,7 +88,10 @@ function split(a, sep) {
 
 function replace(a, b, c) {
   if(typeof key === 'string') return a.replace(b, c);
-  if(Buffer.isBuffer(a)) return bufferReplace(a, b, c);
+  if(Buffer.isBuffer(a)) {
+    c = c || new Buffer('');
+    return bufferReplace(a, b, c);
+  }
   throw new Error("concat() called for something that's neither string nor buffer");
 }
 
@@ -201,7 +204,11 @@ function treeIndexer(db, idb, opts) {
   };
 
   this._getPathPart = function(val) {
-    return this._resolvePropPath(val, this.opts.pathProp);
+    var part = this._resolvePropPath(val, this.opts.pathProp);
+    if(part.indexOf(this.opts.pathProp) >= 0) {
+      part = replace(part, this.opts.pathProp, '');
+    }
+    return part;
   };
 
   this._ignoreInput = function(key, value) {
@@ -717,7 +724,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, o)) {
             return cb();
           }
-          if(opts.match && self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, o, this.push)) {
             this.push(o);
           }
           return cb();
@@ -726,7 +733,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, key)) {
             return cb();
           }
-          if(opts.match && self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, o, this.push)) {
             this.push(key);
           }
           return cb();
@@ -735,7 +742,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, path)) {
             return cb();
           }
-          if(opts.match && self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, o, this.push)) {
             this.push(path);
           }
           return cb();
@@ -749,7 +756,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, value)) {
             return cb();
           }
-          if(opts.match && self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, o, this.push)) {
             this.push(value);
           }
           return cb();
@@ -769,7 +776,7 @@ function treeIndexer(db, idb, opts) {
         if(opts.ignore && self._ignoreOutput(opts, o)) {
           return cb();
         }
-        if(opts.match && self._match(opts, o, this.push)) {
+        if(!opts.match || self._match(opts, o, this.push)) {
           this.push(o);
         }
         return cb();
