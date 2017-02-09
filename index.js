@@ -606,29 +606,32 @@ function treeIndexer(db, idb, opts) {
   
 
   // check if descendant is a descendant of ancestor
+  // ancestor and descendant are full paths to each element
   this._isDescendantOf = function(ancestor, descendant) {
-    // TODO implement
+    if(descendant.indexOf(ancestor) === 0) {
+      return true;
+    }
+    return false;
   };
 
   // used by this._match to keep track of parents of the current node
   this._curAncestors = [];
-
   
-  this._match = function(opts, o, pushCb) {
+  this._match = function(opts, path, o, pushCb) {
+
     var i, cur;
     if(opts.matchAncestors) {
       // loop through saved ancestors
       // removing the ones that aren't ancestors of the current element
       for(i=this._curAncestors.length-1; i >= 0; i--) {
         cur = this._curAncestors[i];
-        if(!this._isDecendantOf(cur, o)) {
+        if(!this._isDescendantOf(cur.path, path)) {
           this._curAncestors.pop();
         }
       }
     }
 
-    // TODO implement check
-    if(true) { 
+    if(opts.match(path, o)) { 
 
       // this was a match, so all ancestors of this element
       // which have not already been pushed to the stream
@@ -636,7 +639,7 @@ function treeIndexer(db, idb, opts) {
       if(opts.matchAncestors) {
         // push all saved ancestors into stream in order
         for(i=0; i < this._curAncestors.length; i++) {
-          pushcb(this._curAncestors[i]);
+          pushCb(this._curAncestors[i].o);
         }
         // clear ancestors since we never want them to be streamed twice
         this._curAncestors = [];
@@ -647,7 +650,10 @@ function treeIndexer(db, idb, opts) {
     // this wasn't a match but maybe it will turn out to be
     // an ancestor of a future match, so remember it
     if(opts.matchAncestors) {
-      this._curAncestors.push(o);
+      this._curAncestors.push({
+        o: o,
+        path: path
+      });
     }
     return false
   };
@@ -656,7 +662,7 @@ function treeIndexer(db, idb, opts) {
     opts = xtend({
       depth: 0, // how many (grand)children deep to go. 0 means infinite
       match: null, // if a string, regex or function, only stream matched items
-      matchAncestors: true, // whether to also stream all ancestors of a match
+      matchAncestors: false, // whether to also stream all ancestors of a match
       ignore: false, // optional function that returns true for values to ignore
       paths: true, // output the path for each child
       keys: true, // output the key for each child
@@ -666,36 +672,44 @@ function treeIndexer(db, idb, opts) {
     }, opts || {});
     
     if(opts.withValues) opts.withKeys = true;
-    if(!opts.parentPath) opts.depth = 0;
+
+    if(opts.match && opts.depth > 0) {
+      opts.depth = 0;
+    }
 
     if(opts.depth > 0) {
-      var parentDepth = this._pathDepth(parentPath);
+      var parentDepth = (parentPath) ? this._pathDepth(parentPath) : 0;
       var maxDepth = parentDepth + opts.depth;
     }
 
-    // if opts.match is a string, regexp or buffer
-    // convert it to a matching function
-    if(typeof opts.match === 'string' || Buffer.isBuffer(opts.match)) {
 
-      var matchQuery = opts.match;
-      opts.match = function(path) {
-        if(typeof path === 'object' && !Buffer.isBuffer(path)) path = path.path;
+    if(opts.match) {
+      this._curAncestors = [];
 
-        if(path.indexOf(matchQuery) >= 0) {
-          return true;
+      // if opts.match is a string, regexp or buffer
+      // convert it to a matching function
+      if(typeof opts.match === 'string' || Buffer.isBuffer(opts.match)) {
+        
+        var matchQuery = opts.match;
+        opts.match = function(path) {
+          if(typeof path === 'object' && !Buffer.isBuffer(path)) path = path.path;
+          
+          if(path.indexOf(matchQuery) >= 0) {
+            return true;
+          }
+          return false;
         }
-        return false;
-      }
-    } else if(opts.match instanceof RegExp) {
-
-      var matchQuery = opts.match;
-      opts.match = function(path) {
-        if(typeof path === 'object' && !Buffer.isBuffer(path)) path = path.path;
-
-        if(path.match(matchQuery)) {
-          return true;
+      } else if(opts.match instanceof RegExp) {
+        
+        var matchQuery = opts.match;
+        opts.match = function(path) {
+          if(typeof path === 'object' && !Buffer.isBuffer(path)) path = path.path;
+          
+          if(path.match(matchQuery)) {
+            return true;
+          }
+          return false;
         }
-        return false;
       }
     }
 
@@ -711,6 +725,7 @@ function treeIndexer(db, idb, opts) {
 
       if(opts.depth > 0) {
         depth = self._pathDepth(path);
+
         if(depth <= parentDepth) return cb();
         if(depth > maxDepth) return cb();
       }
@@ -724,7 +739,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, o)) {
             return cb();
           }
-          if(!opts.match || self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, path, o, this.push.bind(this))) {
             this.push(o);
           }
           return cb();
@@ -733,7 +748,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, key)) {
             return cb();
           }
-          if(!opts.match || self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, path, key, this.push.bind(this))) {
             this.push(key);
           }
           return cb();
@@ -742,7 +757,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, path)) {
             return cb();
           }
-          if(!opts.match || self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, path, path, this.push.bind(this))) {
             this.push(path);
           }
           return cb();
@@ -756,7 +771,7 @@ function treeIndexer(db, idb, opts) {
           if(opts.ignore && self._ignoreOutput(opts, value)) {
             return cb();
           }
-          if(!opts.match || self._match(opts, o, this.push)) {
+          if(!opts.match || self._match(opts, path, value, this.push.bind(this))) {
             this.push(value);
           }
           return cb();
@@ -776,7 +791,7 @@ function treeIndexer(db, idb, opts) {
         if(opts.ignore && self._ignoreOutput(opts, o)) {
           return cb();
         }
-        if(!opts.match || self._match(opts, o, this.push)) {
+        if(!opts.match || self._match(opts, path, o, this.push.bind(this))) {
           this.push(o);
         }
         return cb();

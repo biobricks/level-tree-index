@@ -1,7 +1,7 @@
 
 A streaming tree structure index for leveldb.
 
-Reference every value in your leveldb to its parent, e.g. by setting `value.parentKey` to the key of the parent, then level-tree-index will keep track of the full path for each value and allow you to look up parents and children and stream the entire tree or a part thereof.
+Reference every value in your leveldb to its parent, e.g. by setting `value.parentKey` to the key of the parent, then level-tree-index will keep track of the full path for each value, allow you to look up parents and children, stream the entire tree or a part thereof and even perform streaming search queries on the tree.
 
 This is useful for implementing e.g. nested comments.
 
@@ -166,12 +166,29 @@ depth: 0, // how many (grand)children deep to go. 0 means infinite
 paths: true, // output the path for each child
 keys: true, // output the key for each child
 values: true, // output the value for each child
-ignore: false // optional function that returns true for values to ignore
+ignore: false, // optional function that returns true for values to ignore
+match: null, // Stream only matching elements. A string, buffer or function.
+matchAncestors: false // include ancestors of matches if true
 ```
+
+`opts.depth` is currently not usable at the same time as `opts.match`.
 
 If more than one of `opts.paths`, `opts.keys` and `opts.values` is true then the stream will output objects with these as properties.
 
 `opts.ignore` can be set to a function. This function will receive whatever the stream is about to output (which depends on `opts.paths`, `opts.keys` and `opts.values`) and if the function returns true then those values will not be emitted by the stream.
+
+`opts.match` allows for streaming search queries on the tree. If set to a string or buffer it will match any path that contains that string or buffer. If set to a RegEx then it will run a .match on the path with that RegEx (only works for string paths). If set to a function then that function will be called with the path as first argument and with the second argument depending on the values of `opts.paths`, `opts.keys` and `opts.values`, e.g: 
+
+```
+match: function(path, o) {
+  if(o.value.name.match("cattens")) {
+   return true;
+  }
+  return false;
+}
+```
+
+Setting `opts.matchAncestors` to true modifies the behaviour of `opts.match` to also match all ancestors of matched elements. Ancestors of matched elements will then be streamed in the correct order before the matched element. This requires some buffering so may slow down matches on very large tree indexes.
 
 ## .pathStream(parentPath, [opts])
 
