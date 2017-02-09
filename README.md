@@ -67,7 +67,7 @@ If a function is used then the function will be passed a value from your databas
 
 `opts.sep` can be a buffer of a string and is used as a separator to construct the path to each node in the tree.
 
-`opts.ignore` can be set to a function which will receive the key and value of each added for each change and if it returns something truthy then that value will be ignored by the tree indexer, e.g:
+`opts.ignore` can be set to a function which will receive the key and value for each change and if it returns something truthy then that value will be ignored by the tree indexer, e.g:
 
 ```
 // ignore items where the .name property starts with an underscore
@@ -94,6 +94,41 @@ Limitations when using `levelup:true`:
 * Key and value encoding happens before the data gets to level-tree-index so `opts.pathProp` and `opts.parentProp` must be set to functions and if you're using `valueEncoding:'json'` then those functions will receive the stringified json data.
 
 See `examples/levelup.js` for how to use the `levelup:true` mode.
+
+## .stream(parentPath, [opts])
+
+Stream tree index paths starting from `parentPath`. If parentPath is falsy then the entire tree will be streamed to the specified depth.
+
+Opts:
+
+```
+depth: 0, // how many (grand)children deep to go. 0 means infinite
+paths: true, // output the path for each child
+keys: true, // output the key for each child
+values: true, // output the value for each child
+ignore: false, // optional function that returns true for values to ignore
+match: null, // Stream only matching elements. A string, buffer or function.
+matchAncestors: false // include ancestors of matches if true
+```
+
+`opts.depth` is currently not usable at the same time as `opts.match`.
+
+If more than one of `opts.paths`, `opts.keys` and `opts.values` is true then the stream will output objects with these as properties.
+
+`opts.ignore` can be set to a function. This function will receive whatever the stream is about to output (which depends on `opts.paths`, `opts.keys` and `opts.values`) and if the function returns true then those values will not be emitted by the stream.
+
+`opts.match` allows for streaming search queries on the tree. If set to a string or buffer it will match any path that contains that string or buffer. If set to a RegEx then it will run a .match on the path with that RegEx (only works for string paths). If set to a function then that function will be called with the path as first argument and with the second argument depending on the values of `opts.paths`, `opts.keys` and `opts.values`, e.g: 
+
+```
+match: function(path, o) {
+  if(o.value.name.match("cattens")) {
+   return true;
+  }
+  return false;
+}
+```
+
+Setting `opts.matchAncestors` to true modifies the behaviour of `opts.match` to also match all ancestors of matched elements. Ancestors of matched elements will then be streamed in the correct order before the matched element. This requires some buffering so may slow down matches on very large tree indexes.
 
 ## .getFromPath(path, cb)
 
@@ -155,41 +190,6 @@ Same usage as `.stream` but this version isn't streaming.
 
 Callback: `cb(err, childArray)`
 
-## .stream(parentPath, [opts])
-
-Stream tree index paths starting from `parentPath`. If parentPath is falsy then the entire tree will be streamed to the specified depth.
-
-Opts:
-
-```
-depth: 0, // how many (grand)children deep to go. 0 means infinite
-paths: true, // output the path for each child
-keys: true, // output the key for each child
-values: true, // output the value for each child
-ignore: false, // optional function that returns true for values to ignore
-match: null, // Stream only matching elements. A string, buffer or function.
-matchAncestors: false // include ancestors of matches if true
-```
-
-`opts.depth` is currently not usable at the same time as `opts.match`.
-
-If more than one of `opts.paths`, `opts.keys` and `opts.values` is true then the stream will output objects with these as properties.
-
-`opts.ignore` can be set to a function. This function will receive whatever the stream is about to output (which depends on `opts.paths`, `opts.keys` and `opts.values`) and if the function returns true then those values will not be emitted by the stream.
-
-`opts.match` allows for streaming search queries on the tree. If set to a string or buffer it will match any path that contains that string or buffer. If set to a RegEx then it will run a .match on the path with that RegEx (only works for string paths). If set to a function then that function will be called with the path as first argument and with the second argument depending on the values of `opts.paths`, `opts.keys` and `opts.values`, e.g: 
-
-```
-match: function(path, o) {
-  if(o.value.name.match("cattens")) {
-   return true;
-  }
-  return false;
-}
-```
-
-Setting `opts.matchAncestors` to true modifies the behaviour of `opts.match` to also match all ancestors of matched elements. Ancestors of matched elements will then be streamed in the correct order before the matched element. This requires some buffering so may slow down matches on very large tree indexes.
-
 ## .pathStream(parentPath, [opts])
 
 Same as .stream with only opts.paths set to true.
@@ -232,23 +232,20 @@ If you want to wait for the index to update most of the time then you should pro
 
 ## Technical explanation
 
-I normal operation (opts.levelup == false) level-tree-index will listen for any changes on your database and update its index every time a change occurs on the database. This is implemented using leveup change event listeners which run after the database operation has already completed. 
+I normal operation `(opts.levelup == false)` level-tree-index will listen for any changes on your database and update its index every time a change occurs. This is implemented using leveup change event listeners which run after the database operation has already completed. 
 
-When running `.put` or `.del` directly on level-tree-index the operation is performed on the underlying database, the tree index is updated and then the callback is called. Since we can't turn off the change event listeners for a specific operation, level-tree-index has to remember the operations performed directly through `.put` or `.del` on the level-tree-index instance such that the change event listener can ignore them to prevent the tree-index update operation from being called twice. This is done by hashing the entire operation, saving the hash and then checking the hash of each operation picked up by the change event listeners agains the saved hash. This is obviously inefficient. If this feature is never used then nothing is ever hashed nor compared so performance will not be impacted.
-
+When running `.put` or `.del` directly on level-tree-index the operation is performed on the underlying database then the tree index is updated and then the callback is called. Since we can't turn off the change event listeners for a specific operation, level-tree-index has to remember the operations performed directly through `.put` or `.del` on the level-tree-index instance such that the change event listener can ignore them to prevent the tree-index update operation from being called twice. This is done by hashing the entire operation, saving the hash and then checking the hash of each operation picked up by the change event listeners agains the saved hash. This is obviously inefficient. If this feature is never used then nothing is ever hashed nor compared so performance will not be impacted.
 
 # ToDo
 
 ## Before version 1.0
 
-* Implement more unit tests
-
-## Extras
-
-* Add options for levelup:true mode that sets whether to wait for the index to update before calling back or not, both per default and per .put/.del/.batch operation.
+* Implement unit tests
+* Ability retrieve element and all ancestors of element.
+* Get `opts.depth` working with `opts.match`.
 
 # License and copyright
 
 License: AGPLv3
 
-Copyright 2016 BioBricks foundation.
+Copyright 2016, 2017 BioBricks foundation.
