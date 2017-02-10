@@ -584,7 +584,7 @@ function treeIndexer(db, idb, opts) {
       opts = {};
     }
     
-    var self;
+    var self = this;
     this.path(key, function(err, path) {
       if(err) return cb(err);
 
