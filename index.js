@@ -466,7 +466,7 @@ function treeIndexer(db, idb, opts) {
 
   // get tree path given a key
   this.path = function(key, cb) {
-    var self = this;
+    var self = this;o
 
     this.rdb.get(path, function(err, path) {
       if(err) return cb(err);
