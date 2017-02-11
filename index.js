@@ -273,8 +273,6 @@ function treeIndexer(db, idb, opts) {
 
     var self = this;
 
-    if(this._shouldIgnore(key, value)) return cb();
-
     this.rdb.get(key, function(err, path) {
       if(err) return;
       
