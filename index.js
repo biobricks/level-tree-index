@@ -139,7 +139,7 @@ function treeIndexer(db, idb, opts) {
   this.idb = sublevel(idb, 'i'); // the index db
   this.rdb = sublevel(idb, 'r'); // the reverse lookup db
 
-  if(!this.opts.levelup || !this.opts.listen) {
+  if(this.opts.listen && !this.opts.levelup) {
     this.c = changes(this.db);
     this.c.on('data', function(change) {
       if(this._shouldIgnore(change)) return;
