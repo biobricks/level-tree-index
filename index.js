@@ -839,11 +839,11 @@ function treeIndexer(db, idb, opts) {
       cb = opts;
       opts = {};
     }
-    if(!cb) return this.db.put(key, value, opts);
     
-    // if listening, make listener ignore this next put
+    // if listening
     if(this.opts.listen) {
-      this._ignore('put', key, value);
+      if(!cb) return this.db.put(key, value, opts);
+      this._ignore('put', key, value); // make listener ignore this next put
     }
 
     var self = this;
@@ -860,11 +860,11 @@ function treeIndexer(db, idb, opts) {
       cb = opts;
       opts = {};
     }
-    if(!cb) return this.db.del(key, opts);
 
-    // if listening, make listener ignore this next del
+    // if listening
     if(this.opts.listen) {    
-      this._ignore('del', key, value);
+      if(!cb) return this.db.del(key, opts);
+      this._ignore('del', key, value); // make listener ignore this next del
     }
 
     var self = this;
@@ -880,10 +880,12 @@ function treeIndexer(db, idb, opts) {
       cb = opts;
       opts = {};
     }
-    if(!cb) return this.db.batch(ops, opts);
 
-    // if listening, make listener ignore these next operations
-    if(this.opts.listen) {    
+    // if listening
+    if(this.opts.listen) {
+      if(!cb) return this.db.batch(ops, opts);
+
+      // make listener ignore these next operations
       var i, op;
       for(i=0; i < ops.length; i++) {
         op = ops[i];
