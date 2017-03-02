@@ -87,7 +87,7 @@ function split(a, sep) {
 }
 
 function replace(a, b, c) {
-  if(typeof key === 'string') return a.replace(b, c);
+  if(typeof a === 'string') return a.replace(b, c);
   if(Buffer.isBuffer(a)) {
     c = c || new Buffer('');
     return bufferReplace(a, b, c);
@@ -97,7 +97,7 @@ function replace(a, b, c) {
 
 // resolve a path like ['foo', 'bar', 'baz']
 // to return the value of obj.foo.bar.baz
-// or undefined if tha path does not exist
+// or undefined if that path does not exist
 function resolvePropPath(obj, path) {
 
   if(path.length > 1) {
