@@ -13,6 +13,7 @@ var idb = sublevel(rawdb, 'i');
 var treeIndexer = require('../index.js');
 
 var tree = treeIndexer(db, idb, {
+  sep: '.',
   ignore: function(key, value) {
     if(typeof value === 'object') {
       if(typeof value.name === 'string') {

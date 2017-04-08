@@ -9,7 +9,8 @@ base(function(err, db, tree, cb) {
 
   // get children of foo
   tree.parents('foo.bar.baz', {
-
+    height: 1,
+    includeCurrent: false
   }, function(err, parents) {
     if(err) return cb(err);
     

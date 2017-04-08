@@ -9,6 +9,7 @@ var idb = sublevel(rawdb, 'i');
 var treeIndexer = require('../index.js');
 
 var treedb = treeIndexer(db, idb, {
+  sep: '.',
   levelup: true,
   pathProp: function(value) {
     return JSON.parse(value).name;

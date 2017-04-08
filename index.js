@@ -304,21 +304,13 @@ function treeIndexer(db, idb, opts) {
   };
 
   // get stream of all children, grand-children, etc.
-  this._childStream = function(parentPath, includeParent) {
+  this._childStream = function(parentPath) {
     if(!parentPath || parentPath.length <= 0) return this.idb.createReadStream();
 
-    var o = {
+    return this.idb.createReadStream({
+      gt: concat(parentPath, this.opts.sep),
       lte: concat(concat(parentPath, this.opts.sep), '\xff')
-    };
-
-    var gtParm = 'gt';
-    if(includeParent) {
-      gtParm = 'gte';
-    }
-
-    o[gtParm] = concat(parentPath, this.opts.sep);
-
-    return this.idb.createReadStream(o);
+    });
   };
 
   // update the tree indexes of all descendants (children, grand-children, etc.)
@@ -718,6 +710,7 @@ function treeIndexer(db, idb, opts) {
   this.parentStream = function(path, opts) {
     opts = xtend({
       height: 0, // how many (grand)parent up to go. 0 means infinite
+      includeCurrent: true, // include the node specified by path in the stream 
       paths: true, // output the path for each child
       keys: true, // output the key for each child
       values: true, // output the value for each child
@@ -728,11 +721,25 @@ function treeIndexer(db, idb, opts) {
 
     var self = this;
 
-    var o;
+    if(opts.height > 0) {
+      var startDepth = this._pathDepth(path);
+      var minDepth = startDepth - opts.height;
+    }
+
+    var o, depth;
     var left = path;
+
+    if(!opts.includeCurrent) {
+      left = self.parentPathFromPath(left);
+    }
 
     return from.obj(function(size, next) {
       if(!left) return next(null, null);
+
+      if(opts.height) {
+        depth = self._pathDepth(left);
+        if(depth < minDepth) return next(null, null);
+      }
 
       if(!opts.keys && !opts.values) {
         o = left;
@@ -767,7 +774,7 @@ function treeIndexer(db, idb, opts) {
               value: value
             }
             if(opts.keys) o.key = key;
-            if(opts.paths) o.path = path;
+            if(opts.paths) o.path = left;
           } else {
             o = value;
           }
@@ -801,17 +808,16 @@ function treeIndexer(db, idb, opts) {
 
 
   this.stream = function(parentPath, opts) {
-    if((typeof parentPath === 'object') && !(parentPath instanceof Array)) {
+    if(parentPath && (typeof parentPath === 'object') && !(parentPath instanceof Array)) {
       opts = parentPath;
       parentPath = undefined;
-      if(typeof opts !== 'object' || !((opts.gt || opts.gte) && (opts.lt || opts.lte))) {
+      if(opts && (typeof opts !== 'object' || !((opts.gt || opts.gte) && (opts.lt || opts.lte)))) {
         throw new Error("Either parentPath must be specified or opts.lt/opt.lte and opts.gt/opts.gte must both be specified");
       }
     }
 
     opts = xtend({
       depth: 0, // how many (grand)children deep to go. 0 means infinite
-      includeParent: true, // include the parent specified by parentPath in the stream 
       match: null, // if a string, regex or function, only stream matched items
       matchAncestors: false, // whether to also stream all ancestors of a match
       ignore: false, // optional function that returns true for values to ignore
@@ -844,11 +850,10 @@ function treeIndexer(db, idb, opts) {
 
     if(opts.match) {
       this._curAncestors = [];
-
       // if opts.match is a string, regexp or buffer
       // convert it to a matching function
       if(typeof opts.match === 'string' || Buffer.isBuffer(opts.match)) {
-        
+
         var matchQuery = opts.match;
         opts.match = function(path) {
           if(typeof path === 'object' && !Buffer.isBuffer(path)) path = path.path;
@@ -887,7 +892,7 @@ function treeIndexer(db, idb, opts) {
       }
       s = this.idb.createReadStream(sOpts);
     } else {
-      s = this._childStream(parentPath, opts.includeParent);
+      s = this._childStream(parentPath);
     }
    
 

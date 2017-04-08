@@ -104,7 +104,6 @@ Opts:
 
 ```
 depth: 0, // how many (grand)children deep to go. 0 means infinite
-includeParent: true, // include the parent specified by parentPath in the stream 
 paths: true, // output the path for each child
 keys: true, // output the key for each child
 values: true, // output the value for each child
@@ -147,6 +146,7 @@ Opts:
 
 ```
 height: 0, // how many (grand)children up to go. 0 means infinite
+includeCurrent: true, // include the node specified by path in the stream 
 paths: true, // output the path for each child
 keys: true, // output the key for each child
 values: true, // output the value for each child
