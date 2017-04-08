@@ -44,6 +44,21 @@ function concat(a, b) {
   throw new Error("concat() called for something that's neither string nor buffer");
 }
 
+// get lte key from a key
+// as seen here: https://gist.github.com/loveencounterflow/cb0b76c9d5d0b64137b0
+function lteKey(key) {
+  var b;
+  if(typeof key === 'string') {  
+    b = new Buffer(key + '~');
+    b[b.length-1] = 0xff;
+  } else if(Buffer.isBuffer(key)) {
+    b = Buffer.concat([key, new Buffer([0xff])]);
+  } else {
+    throw new Error("lteKey called for something that's neither string nor buffer");
+  }
+  return b;
+}
+
 // Join an array of either buffers or strings with the optional seperator
 // Output type (buffer or string) will be based on type of first array element
 // unless array is of zero length in which case output type is based on sep type
@@ -309,7 +324,7 @@ function treeIndexer(db, idb, opts) {
 
     return this.idb.createReadStream({
       gt: concat(parentPath, this.opts.sep),
-      lte: concat(concat(parentPath, this.opts.sep), '\xff')
+      lte: this.lteKey(concat(parentPath, this.opts.sep))
     });
   };
 
@@ -387,6 +402,8 @@ function treeIndexer(db, idb, opts) {
       
     }.bind(this));
   }
+
+  this.lteKey = lteKey;
 
   // clear an index (delete the index data from the db)
   this.clear = function(cb) {
@@ -890,6 +907,7 @@ function treeIndexer(db, idb, opts) {
       } else if(opts.lte) {
         sOpts.lte = opts.lte;
       }
+
       s = this.idb.createReadStream(sOpts);
     } else {
       s = this._childStream(parentPath);

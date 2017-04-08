@@ -138,6 +138,21 @@ match: function(path, o) {
 
 Setting `opts.matchAncestors` to true modifies the behaviour of `opts.match` to also match all ancestors of matched elements. Ancestors of matched elements will then be streamed in the correct order before the matched element. This requires some buffering so may slow down matches on very large tree indexes.
 
+When using `opts.lt/opts.lte` you can use the convenience function `.lteKey(key)`. E.g. to stream all paths that begin with 'foo.bar' you could run:
+
+```
+levelTree.stream({
+  gte: 'foo.bar',
+  lte: levelTree.lteKey('foo.bar')
+});
+```
+
+Keep in mind that the above example would also return paths like 'foo.barbar'.
+
+## .lteKey(key)
+
+Convenience function that, according to leveldb alphabetical ordering, returns the last possible string or buffer that begins with the specified string or buffer. 
+
 ## .parentStream(path, [opts])
 
 Stream tree index ancestor paths starting from `path`. Like `.stream()` but traverses ancestors instead of descendants.
