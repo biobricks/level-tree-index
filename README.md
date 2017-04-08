@@ -55,7 +55,8 @@ opts:
 ```
 pathProp: 'name' // property used to construct the path
 parentProp: 'parentKey' // property that references key of parent
-sep: '.', // path separator
+sep: 0x1f, // path separator. can be string or unicode/ascii character code
+pathArray: false, // for functions that output paths, output paths as arrays
 ignore: false, // set to a function to selectively ignore 
 listen: true, // listen for changes on db and update index automatically
 levelup: false // if true, returns a levelup instance instead
@@ -95,21 +96,29 @@ Limitations when using `levelup:true`:
 
 See `examples/levelup.js` for how to use the `levelup:true` mode.
 
-## .stream(parentPath, [opts])
+## .stream([parentPath], [opts])
 
-Stream tree index paths starting from `parentPath`. If parentPath is falsy then the entire tree will be streamed to the specified depth.
+Recursively stream descendants starting from `parentPath`. If `parentPath` is falsy then the entire tree will be streamed to the specified depth.
 
 Opts:
 
 ```
 depth: 0, // how many (grand)children deep to go. 0 means infinite
+includeParent: true, // include the parent specified by parentPath in the stream 
 paths: true, // output the path for each child
 keys: true, // output the key for each child
 values: true, // output the value for each child
+pathArray: undefined, // output paths as arrays
 ignore: false, // optional function that returns true for values to ignore
 match: null, // Stream only matching elements. A string, buffer or function.
-matchAncestors: false // include ancestors of matches if true
+matchAncestors: false, // include ancestors of matches if true
+gt: undefined, // specify gt directly, must then also specify lt or lte
+gte: undefined, // specify gte directly, must then also specify lt or lte
+lt: undefined, // specify lt directly, must then also specify gt or gte
+lte: undefined // specify lte directly, must then also specify lt or gte
 ```
+
+If `parentPath` is not specified then `.gt/.gte` and `.lt/.lte` must be specified.
 
 `opts.depth` is currently not usable at the same time as `opts.match`.
 
@@ -130,15 +139,37 @@ match: function(path, o) {
 
 Setting `opts.matchAncestors` to true modifies the behaviour of `opts.match` to also match all ancestors of matched elements. Ancestors of matched elements will then be streamed in the correct order before the matched element. This requires some buffering so may slow down matches on very large tree indexes.
 
+## .parentStream(path, [opts])
+
+Stream tree index ancestor paths starting from `path`. Like `.stream()` but traverses ancestors instead of descendants.
+
+Opts:
+
+```
+height: 0, // how many (grand)children up to go. 0 means infinite
+paths: true, // output the path for each child
+keys: true, // output the key for each child
+values: true, // output the value for each child
+pathArray: undefined, // output paths as arrays
+```
+
+## .parents(path, [opts], cb)
+
+Same as `.parentStream` but calls back with the results as an array.
+
 ## .getFromPath(path, cb)
 
 Get key and value from path. 
 
 Callback: `cb(err, key, value)`
 
-## .path(key, cb)
+## .path(key, [opts], cb)
 
 Get tree path given a key.
+
+```
+opts.pathArray: undefined // if true, split path into array 
+```
 
 Callback: `cb(err, path)`
 
@@ -148,15 +179,23 @@ Get parent value given a value.
 
 Callback: `cb(err, parentValue)`
 
-## .parentPath(key, cb)
+## .parentPath(key, [opts], cb)
 
 Get parent path given a key.
 
+```
+opts.pathArray: undefined // if true, split path into array
+```
+
 Callback: `cb(err, parentPath)`
 
-## .parentPathFromValue(key, cb)
+## .parentPathFromValue(key, [opts],  cb)
 
 Get parent path given a value.
+
+```
+opts.pathArray: undefined // if true, split path into array
+```
 
 Callback: `cb(err, parentPath)`
 
@@ -166,9 +205,13 @@ Get parent value given a path.
 
 Callback: `cb(err, parentValue)`
 
-## .parentPathFromPath(path, cb)
+## .parentPathFromPath(path, [opts], cb)
 
 Get parent path given a path.
+
+```
+opts.pathArray: undefined // if true, split path into array
+```
 
 Note: this function can be called synchronously
 

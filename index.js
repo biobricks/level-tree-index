@@ -1,6 +1,7 @@
 
 var crypto = require('crypto');
 var through = require('through2');
+var from = require('from2');
 var sublevel = require('subleveldown');
 var xtend = require('xtend');
 var bufferReplace = require('buffer-replace');
@@ -80,7 +81,7 @@ function split(a, sep) {
   } else if(Buffer.isBuffer(a)) {
 
     if(!Buffer.isBuffer(sep)) sep = new Buffer(sep);
-    returnbufferSplit(a, sep);
+    return bufferSplit(a, sep);
   }
 
   throw new Error("I can only split strings and buffers");
@@ -92,7 +93,7 @@ function replace(a, b, c) {
     c = c || new Buffer('');
     return bufferReplace(a, b, c);
   }
-  throw new Error("concat() called for something that's neither string nor buffer");
+  throw new Error("replace() only supports string and buffer types but called for value:" + a);
 }
 
 // resolve a path like ['foo', 'bar', 'baz']
@@ -118,7 +119,8 @@ function treeIndexer(db, idb, opts) {
   opts = xtend({
     pathProp: 'name', // property used to construct the path
     parentProp: 'parentKey', // property that references key of parent
-    sep: '.', // path separator
+    sep: 0x1f, // path separator (default is the ascii "unit separator")
+    pathArray: false, // output the path as an array
     listen: true, // listen for changes on db and update index automatically
     levelup: false // if true, return a levelup wrapper
   }, opts || {});
@@ -134,6 +136,10 @@ function treeIndexer(db, idb, opts) {
   this.opts = opts;
 
   if(this.opts.sep.length < 1) throw new Error("Seperator cannot be zero length");
+
+  if(typeof this.opts.sep === 'number') {
+    this.opts.sep = String.fromCharCode(this.opts.sep);
+  }
 
   this.db = db;
   this.idb = sublevel(idb, 'i'); // the index db
@@ -205,8 +211,9 @@ function treeIndexer(db, idb, opts) {
 
   this._getPathPart = function(val) {
     var part = this._resolvePropPath(val, this.opts.pathProp);
-    if(part.indexOf(this.opts.pathProp) >= 0) {
-      part = replace(part, this.opts.pathProp, '');
+    // remove separator from the name
+    if(part.indexOf(this.opts.sep) >= 0) {
+      part = replace(part, this.opts.sep, '');
     }
     return part;
   };
@@ -297,14 +304,21 @@ function treeIndexer(db, idb, opts) {
   };
 
   // get stream of all children, grand-children, etc.
-  this._childStream = function(parentPath) {
+  this._childStream = function(parentPath, includeParent) {
     if(!parentPath || parentPath.length <= 0) return this.idb.createReadStream();
 
-
-    return this.idb.createReadStream({
-      gt: concat(parentPath, this.opts.sep),
+    var o = {
       lte: concat(concat(parentPath, this.opts.sep), '\xff')
-    });    
+    };
+
+    var gtParm = 'gt';
+    if(includeParent) {
+      gtParm = 'gte';
+    }
+
+    o[gtParm] = concat(parentPath, this.opts.sep);
+
+    return this.idb.createReadStream(o);
   };
 
   // update the tree indexes of all descendants (children, grand-children, etc.)
@@ -447,6 +461,7 @@ function treeIndexer(db, idb, opts) {
     }.bind(this));
   };
 
+
   // get key and value from tree path
   this.getFromPath = function(path, cb) {
     var self = this;
@@ -459,15 +474,26 @@ function treeIndexer(db, idb, opts) {
         cb(null, key, value);
       });
     });
-
   };
 
   // get tree path given a key
-  this.path = function(path, cb) {
+  this.path = function(key, opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    opts = opts || {};
     var self = this;
 
-    this.rdb.get(path, function(err, path) {
+    if(opts.pathArray === undefined) {
+      opts.pathArray = this.opts.pathArray;
+    }    
+
+    this.rdb.get(key, function(err, path) {
       if(err) return cb(err);
+      if(opts.pathArray) {
+        path = split(path, self.opts.sep);         
+      }
       return cb(null, path);
     });
 
@@ -498,22 +524,46 @@ function treeIndexer(db, idb, opts) {
   };
 
   // get parent path given a key
-  this.parentPath = function(key, cb) {
+  this.parentPath = function(key, opts, cb) {
     var self = this;
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    opts = opts || {};
+
+    if(opts.pathArray === undefined) {
+      opts.pathArray = this.opts.pathArray;
+    }
 
     this.db.get(key, function(err, value) {
       if(err) return cb(err);
 
-      self.parentPathFromValue(value, cb);
+      self.parentPathFromValue(value, opts, cb);
     });    
   };
 
   // get parent path given a value
-  this.parentPathFromValue = function(value, cb) {
+  this.parentPathFromValue = function(value, opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    opts = opts || {};
+
+    if(opts.pathArray === undefined) {
+      opts.pathArray = this.opts.pathArray;
+    }
+
     var parentKey = this._getParentKey(value);
 
     if(parentKey === undefined) return cb(null, undefined);
-    this.rdb.get(parentKey, cb);
+    this.rdb.get(parentKey, function(err, path) {
+      if(opts.pathArray) {
+        path = split(path, self.opts.sep);         
+      }
+      return cb(null, path);
+    });
   };
 
   // get parent value given a path
@@ -525,7 +575,16 @@ function treeIndexer(db, idb, opts) {
 
   // get parent path given a path
   // note: this function can be called synchronously
-  this.parentPathFromPath = function(path, cb) {
+  this.parentPathFromPath = function(path, opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    opts = opts || {};
+    if(opts.pathArray === undefined) {
+      opts.pathArray = this.opts.pathArray;
+    }    
+
     var sep = this.opts.sep;
     var a, res;
 
@@ -545,7 +604,11 @@ function treeIndexer(db, idb, opts) {
 
     a = a.slice(0, a.length-1);
     if(a.length > 0) {
-      res = join(a, sep);
+      if(!opts.pathArray) {
+        res = join(a, sep);
+      } else {
+        res = a;
+      }
     } else {
       res = undefined;
     }
@@ -598,11 +661,6 @@ function treeIndexer(db, idb, opts) {
     // TODO
   };
     
-
-  this.pathStream = function() {
-    return this._childStream();
-  };
-  
 
   // check if descendant is a descendant of ancestor
   // ancestor and descendant are full paths to each element
@@ -657,17 +715,116 @@ function treeIndexer(db, idb, opts) {
     return false
   };
 
+  this.parentStream = function(path, opts) {
+    opts = xtend({
+      height: 0, // how many (grand)parent up to go. 0 means infinite
+      paths: true, // output the path for each child
+      keys: true, // output the key for each child
+      values: true, // output the value for each child
+      // if more than one of paths, keys and values is true
+      // then the stream will output objects with these as properties
+      pathArray: undefined // output the path as an array. defaults to level-tree-index constructor opts value
+    }, opts || {});
+
+    var self = this;
+
+    var o;
+    var left = path;
+
+    return from.obj(function(size, next) {
+      if(!left) return next(null, null);
+
+      if(!opts.keys && !opts.values) {
+        o = left;
+        left = self.parentPathFromPath(left);
+        next(null, o);
+        return;
+      }
+
+      self.idb.get(left, function(err, key) {
+        if(err) return next(err);
+        
+        if(!opts.values) {
+          if(opts.paths) {
+            o = {
+              key: key,
+              path: left
+            };
+          } else {
+            o = key;
+          }
+
+          left = self.parentPathFromPath(left);
+          next(null, o);
+          return;
+        }
+
+        self.db.get(key, function(err, value) {
+          if(err) return next(err);
+
+          if(opts.paths || opts.keys) {
+            o = {
+              value: value
+            }
+            if(opts.keys) o.key = key;
+            if(opts.paths) o.path = path;
+          } else {
+            o = value;
+          }
+
+          left = self.parentPathFromPath(left);
+          next(null, o);
+        });
+      });
+    });
+  };
+
+
+  this.parents = function(path, opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    var objs = [];
+    
+    var s = this.parentStream(path, opts);
+
+    s.on('error', cb);
+    s.on('end', function() {
+      cb(null, objs);
+    });
+
+    s.on('data', function(data) {
+      objs.push(data);
+    });
+  };
+
+
   this.stream = function(parentPath, opts) {
+    if((typeof parentPath === 'object') && !(parentPath instanceof Array)) {
+      opts = parentPath;
+      parentPath = undefined;
+      if(typeof opts !== 'object' || !((opts.gt || opts.gte) && (opts.lt || opts.lte))) {
+        throw new Error("Either parentPath must be specified or opts.lt/opt.lte and opts.gt/opts.gte must both be specified");
+      }
+    }
+
     opts = xtend({
       depth: 0, // how many (grand)children deep to go. 0 means infinite
+      includeParent: true, // include the parent specified by parentPath in the stream 
       match: null, // if a string, regex or function, only stream matched items
       matchAncestors: false, // whether to also stream all ancestors of a match
       ignore: false, // optional function that returns true for values to ignore
       paths: true, // output the path for each child
       keys: true, // output the key for each child
-      values: true // output the value for each child
+      values: true, // output the value for each child
       // if more than one of paths, keys and values is true
       // then the stream will output objects with these as properties
+      pathArray: undefined, // output the path as an array. defaults to level-tree-index constructor opts value
+      gt: undefined, // specify gt directly, must then also specify lt or lte
+      gte: undefined, // specify gte directly, must then also specify lt or lte
+      lt: undefined, // specify lt directly, must then also specify gt or gte
+      lte: undefined // specify lte directly, must then also specify lt or gte
     }, opts || {});
     
     if(opts.withValues) opts.withKeys = true;
@@ -676,11 +833,14 @@ function treeIndexer(db, idb, opts) {
       opts.depth = 0;
     }
 
+    if(opts.pathArray === undefined) {
+      opts.pathArray = this.opts.pathArray;
+    }
+
     if(opts.depth > 0) {
       var parentDepth = (parentPath) ? this._pathDepth(parentPath) : 0;
       var maxDepth = parentDepth + opts.depth;
     }
-
 
     if(opts.match) {
       this._curAncestors = [];
@@ -712,7 +872,24 @@ function treeIndexer(db, idb, opts) {
       }
     }
 
-    var s = this._childStream(parentPath);
+    var s;
+    if(opts.gt || opts.gte) {
+      var sOpts = {};
+      if(opts.gt) {
+        sOpts.gt = opts.gt;
+      } else if(opts.gte) {
+        sOpts.gte = opts.gte;
+      }
+      if(opts.lt) {
+        sOpts.lt = opts.lt;
+      } else if(opts.lte) {
+        sOpts.lte = opts.lte;
+      }
+      s = this.idb.createReadStream(sOpts);
+    } else {
+      s = this._childStream(parentPath, opts.includeParent);
+    }
+   
 
     var self = this;
 
@@ -720,6 +897,9 @@ function treeIndexer(db, idb, opts) {
     var out = through.obj(function(data, enc, cb) {
 
       var path = data.key;
+      if(opts.pathArray) {
+        path = split(path, self.opts.sep); 
+      }
       var key = data.value;
 
       if(opts.depth > 0) {

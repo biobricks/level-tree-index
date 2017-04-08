@@ -28,6 +28,7 @@
     "async": "^2.1.2",
     "buffer-replace": "^1.0.0",
     "buffer-split": "^1.0.0",
+    "from2": "^2.3.0",
     "level-changes": "0.0.1",
     "levelup": "^1.3.3",
     "subleveldown": "^2.1.0",

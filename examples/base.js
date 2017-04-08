@@ -7,7 +7,9 @@ var db = sublevel(rawdb, 'd', {valueEncoding: 'json'});
 var idb = sublevel(rawdb, 'i');
 var treeIndexer = require('../index.js');
 
-var tree = treeIndexer(db, idb);
+var tree = treeIndexer(db, idb, {
+  sep: '.'
+});
 
 function cleanup(err) {
   if(err) {
