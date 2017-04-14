@@ -27,7 +27,7 @@ tape('update-no-move', function(t) {
                     t.deepEqual(arrayFromPaths(children),[
                         'foo.bar-updated',
                         'foo.bar-updated.baz',
-                        'foo.cat',
+                        'foo.cat'
                     ],"objects as expected after update")
                     if(err) t.fail("mysterious failure E: " + err)
                     t.end()
