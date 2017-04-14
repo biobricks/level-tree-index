@@ -20,7 +20,11 @@ tape('getFromPath', function(t) {
           t.notOk(err, 'no err')
           t.same(key, '2');
 
-          t.same(value.name, 'bar');
+            if ((typeof value) == 'object') {
+                t.same(value.name, 'bar')
+            } else {
+                t.fail("value is not an object, its type is: " + (typeof value))
+            }
           t.end();
         });
       }, 500);
