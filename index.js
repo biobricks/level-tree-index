@@ -253,18 +253,17 @@ function treeIndexer(db, idb, opts) {
 
   this._onPut = function(key, value, cb) {
     cb = cb || function(){};
-    
+
     if(this._ignoreInput(key, value)) return cb();
 
     var self = this;
     this._buildPath(value, function(err, path) {
       if(err) return cb(err);
-      
-
+     
       // was this a move? (does it already exist in index?
       self.rdb.get(key, function(revErr, data) {
         if(revErr && !revErr.notFound) return cb(revErr)
-        
+
         async.parallel([function(cb) {
           self.idb.put(path, key, cb);
         }, function(cb) {
@@ -276,10 +275,14 @@ function treeIndexer(db, idb, opts) {
           // so we are done
           if(revErr && revErr.notFound) return cb();
           
-          // this was a move so we need to delete the previous entry in idb
           var prevPath = data;
 
-          self.idb.del(data, function(err) {
+          // don't delete if it didn't move
+          if(prevPath === path) { 
+            return cb();
+          }
+          // this was a move so we need to delete the previous entry in idb
+          self.idb.del(prevPath, function(err) {
             if(err) return cb(err);
             
             // since it was a move there may be children and grandchildren
@@ -333,14 +336,19 @@ function treeIndexer(db, idb, opts) {
   this._moveChildren = function(oldPath, newPath, cb) {
     cb = cb || function(){};
 
+    if(oldPath === newPath) {
+      process.nextTick(cb);
+      return;
+    }
+
     var s = this._childStream(oldPath);
 
     var oldChildPath;
     var newChildPath;
     s.on('data', function(data) {
+
       oldChildPath = data.key;
       newChildPath = replace(data.key, oldPath, newPath);
-
       this.idb.put(newChildPath, data.value);
       this.rdb.put(data.value, newChildPath);
       this.idb.del(oldChildPath);
@@ -1052,7 +1060,6 @@ function treeIndexer(db, idb, opts) {
     var self = this;
     this.db.put(key, value, opts, function(err) {
       if(err) return cb(err);
-
       self._onPut(key, value, cb);
     });
   };
