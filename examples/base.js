@@ -1,25 +1,24 @@
 
-var sublevel = require('subleveldown');
-var memdb = require('memdb');
-
-var rawdb = memdb();
-var db = sublevel(rawdb, 'd', {valueEncoding: 'json'});
-var idb = sublevel(rawdb, 'i');
-var treeIndexer = require('../index.js');
-
-var tree = treeIndexer(db, idb, {
-  sep: '.'
-});
 
 function cleanup(err) {
   if(err) {
     console.error(err);
-//    process.exit(1);
   }
-//  process.exit(0);
 }
 
 module.exports = function(cb) {
+
+  var sublevel = require('subleveldown');
+  var memdb = require('memdb');
+  
+  var rawdb = memdb();
+  var db = sublevel(rawdb, 'd', {valueEncoding: 'json'});
+  var idb = sublevel(rawdb, 'i');
+  var treeIndexer = require('../index.js');
+  
+  var tree = treeIndexer(db, idb, {
+    sep: '.'
+  });
 
 /*
  
