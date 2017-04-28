@@ -1,4 +1,12 @@
 
+function cleanup(err) {
+  if(err) {
+    console.error(err);
+  }
+}
+
+module.exports = function(cb) {
+
 var sublevel = require('subleveldown');
 var memdb = require('memdb');
 
@@ -10,16 +18,6 @@ var treeIndexer = require('../index.js');
 var tree = treeIndexer(db, idb, {
   sep: '.'
 });
-
-function cleanup(err) {
-  if(err) {
-    console.error(err);
-//    process.exit(1);
-  }
-//  process.exit(0);
-}
-
-module.exports = function(cb) {
 
 /*
  
