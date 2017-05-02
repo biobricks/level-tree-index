@@ -1,6 +1,6 @@
 {
   "name": "level-tree-index",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Tree indexer for leveldb",
   "homepage": "http://github.com/biobricks/level-tree-index",
   "main": "index.js",
