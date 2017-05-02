@@ -8,8 +8,9 @@ var bufferReplace = require('buffer-replace');
 var bufferSplit = require('buffer-split');
 var changes = require('level-changes');
 var async = require('async');
-var util = require('util')
-var levelup = require('levelup')
+var util = require('util');
+var levelup = require('levelup');
+var batchlevel = require('batchlevel');
 var AbstractLevelDOWN = require('abstract-leveldown').AbstractLevelDOWN;
 
 // hash an operation
@@ -129,7 +130,6 @@ function resolvePropPath(obj, path) {
   return undefined;
 }
 
-
 function treeIndexer(db, idb, opts) {
   opts = xtend({
     pathProp: 'name', // property used to construct the path
@@ -157,6 +157,7 @@ function treeIndexer(db, idb, opts) {
   }
 
   this.db = db;
+  this.bdb = batchlevel(db);
   this.idb = sublevel(idb, 'i'); // the index db
   this.rdb = sublevel(idb, 'r'); // the reverse lookup db
 
@@ -264,29 +265,32 @@ function treeIndexer(db, idb, opts) {
       self.rdb.get(key, function(revErr, data) {
         if(revErr && !revErr.notFound) return cb(revErr)
 
-        async.parallel([function(cb) {
-          self.idb.put(path, key, cb);
-        }, function(cb) {
-          self.rdb.put(key, path, cb);
-        }], function(err) {
+        self.idb.put(path, key, function(err) {
           if(err) return cb(err);
-          
-          // if there was no reverse lookup entry then this was a new put
-          // so we are done
-          if(revErr && revErr.notFound) return cb();
-          
-          var prevPath = data;
-
-          // don't delete if it didn't move
-          if(prevPath === path) { 
-            return cb();
-          }
-          // this was a move so we need to delete the previous entry in idb
-          self.idb.del(prevPath, function(err) {
+          self.rdb.put(key, path, function(err) {
             if(err) return cb(err);
             
-            // since it was a move there may be children and grandchildren
-            self._moveChildren(prevPath, path, cb);          
+            // if there was no reverse lookup entry then this was a new put
+            // so we are done
+            if(revErr && revErr.notFound) return self.bdb.write(cb);
+            
+            var prevPath = data;
+            
+            // don't delete if it didn't move
+            if(prevPath === path) { 
+              return self.bdb.write(cb);
+            }
+            // this was a move so we need to delete the previous entry in idb
+            self.idb.del(prevPath, function(err) {
+              if(err) return cb(err);
+              
+              // since it was a move there may be children and grandchildren
+              self._moveChildren(prevPath, path, function(err) {
+                if(err) return cb(err);
+                
+                self.bdb.write(cb);
+              });
+            });
           })
         });
       });
@@ -301,22 +305,26 @@ function treeIndexer(db, idb, opts) {
     this.rdb.get(key, function(err, path) {
       if(err) return;
       
-      async.parallel([function(cb) {
-        self.idb.del(path, cb);
-      }, function(cb) {
-        self.rdb.del(key, cb);
-      }], function(err) {
+      self.idb.del(path, function(err) {
         if(err) return cb(err);
 
-        var newPath;
-        if(Buffer.isBuffer(path)) {
-          newPath = new Buffer();
-        } else {
-          newPath = '';
-        }
-        
-        // move children to be root nodes
-        self._moveChildren(path, newPath, cb);
+        self.rdb.del(key, function(err) {          
+          if(err) return cb(err);
+
+          var newPath;
+          if(Buffer.isBuffer(path)) {
+            newPath = new Buffer();
+          } else {
+            newPath = '';
+          }
+          
+          // move children to be root nodes
+          self._moveChildren(path, newPath, function(err) {
+            if(err) return cb(err);
+
+            self.bdb.write(cb);
+          });
+        });
       });
     });
   };
@@ -1107,13 +1115,17 @@ function treeIndexer(db, idb, opts) {
     this.db.batch(ops, opts, function(err) {
       if(err) return cb(err);
 
-      async.each(ops, function(op, cb) {
+      async.eachSeries(ops, function(op, cb) {
         if(op.type === 'put') {
           self._onPut(op.key, op.value, cb)
         } else { // del
           self._onDel(op.key, cb)
         }
-      }, cb);
+      }, function(err) {
+        if(err) return cb(err);
+        
+        self.db.write(cb);
+      });
     });
   };
 
