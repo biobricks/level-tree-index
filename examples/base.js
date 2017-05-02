@@ -28,8 +28,6 @@ foo
 ----baz
 --cat
 
-and then gets a stream of the child-paths of foo
-
 */
 
   tree.put('1', {name: "foo"}, function(err) {

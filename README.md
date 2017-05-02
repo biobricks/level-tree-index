@@ -298,8 +298,7 @@ When running `.put` or `.del` directly on level-tree-index the operation is perf
 
 ## Before version 1.0
 
-* Implement unit tests
-* Ability retrieve element and all ancestors of element.
+* Implement more unit tests
 * Get `opts.depth` working with `opts.match`.
 
 # License and copyright

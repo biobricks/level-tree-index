@@ -477,12 +477,12 @@ function treeIndexer(db, idb, opts) {
 
 
   // clear and then build an index from scratch for existing contents of the db
-  this.rebuild = function() {
+  this.rebuild = function(cb) {
+    cb = cb || function() {}
     this.clear(function(err) {
-      if(err) return;
+      if(err) return cb(err);
 
-      this.build();
-
+      this.build(cb);
     }.bind(this));
   };
 
