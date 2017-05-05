@@ -41,7 +41,7 @@ db.put('1', {name: "foo"}, function(err) {
 
 ```
 
-See `examples/` for more.
+Read the unit tests in `tests/` for more.
 
 # API
 
@@ -94,7 +94,7 @@ Limitations when using `levelup:true`:
 * It is currently not possible _not_ to wait for the tree index to update so it will take longer before the .put, .del and .batch callbacks are called.
 * Key and value encoding happens before the data gets to level-tree-index so `opts.pathProp` and `opts.parentProp` must be set to functions and if you're using `valueEncoding:'json'` then those functions will receive the stringified json data.
 
-See `examples/levelup.js` for how to use the `levelup:true` mode.
+See `tests/levelup.js` for how to use the `levelup:true` mode.
 
 ## .stream([parentPath], [opts])
 
@@ -298,7 +298,6 @@ When running `.put` or `.del` directly on level-tree-index the operation is perf
 
 ## Before version 1.0
 
-* Implement more unit tests
 * Get `opts.depth` working with `opts.match`.
 
 # License and copyright
