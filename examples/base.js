@@ -5,7 +5,7 @@ function cleanup(err) {
   }
 }
 
-module.exports = function(cb) {
+module.exports = function(cb,opts) {
 
 var sublevel = require('subleveldown');
 var memdb = require('memdb');
@@ -15,9 +15,11 @@ var db = sublevel(rawdb, 'd', {valueEncoding: 'json'});
 var idb = sublevel(rawdb, 'i');
 var treeIndexer = require('../index.js');
 
-var tree = treeIndexer(db, idb, {
-  sep: '.'
-});
+var xtend = require('xtend');
+opts = xtend({
+    sep: '.'
+}, opts || {});
+var tree = treeIndexer(db, idb, opts);
 
 /*
  
