@@ -17,7 +17,8 @@ var treeIndexer = require('../index.js');
 
 var xtend = require('xtend');
 opts = xtend({
-    sep: '.'
+    sep: '.',
+    barname: 'bar'
 }, opts || {});
 var tree = treeIndexer(db, idb, opts);
 
@@ -35,7 +36,7 @@ foo
   tree.put('1', {name: "foo"}, function(err) {
     if(err) return cb(err);
     
-    tree.put('2', {parentKey: '1', name: "bar"}, function(err) {
+    tree.put('2', {parentKey: '1', name: opts.barname}, function(err) {
       if(err) return cb(err);
       
       tree.put('3', {parentKey: '2', name: "baz"}, function(err) {
