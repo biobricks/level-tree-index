@@ -1,4 +1,4 @@
-var base = require('../examples/base.js');
+var base = require('base');
 var tape = require('tape');
 
 tape('levelup', function(t) {

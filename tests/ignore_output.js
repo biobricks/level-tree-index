@@ -1,4 +1,4 @@
-var base = require('../examples/base.js');
+var base = require('base');
 var tape = require('tape');
 
 tape('ignore_output', function(t) {
