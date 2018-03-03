@@ -5,11 +5,12 @@ function cleanup(err) {
   }
 }
 
-module.exports = function(cb,opts) {
+module.exports = function(cb, opts) {
 
 var sublevel = require('subleveldown');
 var memdb = require('memdb');
 
+var uuid = require('uuid').v4;
 var rawdb = memdb();
 var db = sublevel(rawdb, 'd', {valueEncoding: 'json'});
 var idb = sublevel(rawdb, 'i');
@@ -33,19 +34,32 @@ foo
 
 */
 
-  tree.put('1', {name: "foo"}, function(err) {
+  var o;
+  o = {name: "foo"};
+  if(opts.uniquefy) o.unique = uuid();
+
+  tree.put('1', o, function(err, path) {
     if(err) return cb(err);
     
-    tree.put('2', {parentKey: '1', name: opts.barname}, function(err) {
+    o = {parentKey: '1', name: opts.barname};
+    if(opts.uniquefy) o.unique = uuid();
+
+    tree.put('2', o, function(err) {
       if(err) return cb(err);
       
-      tree.put('3', {parentKey: '2', name: "baz"}, function(err) {
+      o = {parentKey: '2', name: "baz"};
+      if(opts.uniquefy) o.unique = uuid();
+
+      tree.put('3', o, function(err) {
         if(err) return cb(err);
-        
-        tree.put('4', {parentKey: '1', name: "cat"}, function(err) {
+
+        o = {parentKey: '1', name: "cat"};
+        if(opts.uniquefy) o.unique = uuid();
+
+        tree.put('4', o, function(err) {
           if(err) return cb(err);
           
-          cb(err, db, tree, cleanup);
+          cb(err, db, tree, cleanup, path);
           
         });
       });

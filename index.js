@@ -11,7 +11,6 @@ var async = require('async');
 var util = require('util');
 var levelup = require('levelup');
 var batchlevel = require('batchlevel');
-var uuid = require('uuid').v4;
 var AbstractLevelDOWN = require('abstract-leveldown').AbstractLevelDOWN;
 
 // hash an operation
@@ -136,8 +135,9 @@ function treeIndexer(db, idb, opts) {
     pathProp: 'name', // property used to construct the path
     parentProp: 'parentKey', // property that references key of parent
     uniquefy: false, // add uuid to end of pathProp to ensure uniqueness
+    uniqProp: 'unique', // property used for uniqueness
     sep: 0x1f, // path separator (default is the ascii "unit separator")
-    endSep: 0x1e, // if uniquefy is truthy separates pathProp and uuid
+    uniqSep: 0x1e, // if uniquefy is truthy separates pathProp and uuid
     pathArray: false, // output the path as an array
     listen: true, // listen for changes on db and update index automatically
     levelup: false // if true, return a levelup wrapper
@@ -159,14 +159,15 @@ function treeIndexer(db, idb, opts) {
     this.opts.sep = String.fromCharCode(this.opts.sep);
   }
 
-  if(this.opts.endSep.length < 1) throw new Error("End seperator cannot be zero length");
-
-  if(typeof this.opts.endSep === 'number') {
-    this.opts.endSep = String.fromCharCode(this.opts.endSep);
+  if(typeof this.opts.uniqSep === 'number') {
+    this.opts.uniqSep = String.fromCharCode(this.opts.uniqSep);
   }
 
+  if(this.opts.uniqSep.length != 1) throw new Error("End seperator must be one character long");
+
+  // TODO we're not actually using batchlevel
   this.db = db;
-  this.bdb = batchlevel(db);
+  this.bdb = batchlevel(idb);
   this.idb = sublevel(idb, 'i'); // the index db
   this.rdb = sublevel(idb, 'r'); // the reverse lookup db
 
@@ -242,12 +243,14 @@ function treeIndexer(db, idb, opts) {
     }
 
     if(this.opts.uniquefy) {
-      // remove end separate from the name
-      if(part.indexOf(this.opts.endSep) >= 0) {
-        part = replace(part, this.opts.endSep, '');
+
+      // remove end separator from the name
+      if(part.indexOf(this.opts.uniqSep) >= 0) {
+        part = replace(part, this.opts.uniqSep, '');
       }
 
-      part = part+this.opts.endSep+uuid();
+      // TODO support buffers
+      part = part + this.opts.uniqSep + this._resolvePropPath(val, this.opts.uniqProp);
     }
     return part;
   };
@@ -278,7 +281,7 @@ function treeIndexer(db, idb, opts) {
     var self = this;
     this._buildPath(value, function(err, path) {
       if(err) return cb(err);
-     
+
       // was this a move? (does it already exist in index?
       self.rdb.get(key, function(revErr, data) {
         if(revErr && !revErr.notFound) return cb(revErr)
@@ -290,13 +293,30 @@ function treeIndexer(db, idb, opts) {
             
             // if there was no reverse lookup entry then this was a new put
             // so we are done
-            if(revErr && revErr.notFound) return self.bdb.write(cb);
+            if(revErr && revErr.notFound) {
+
+              if(!self.opts.uniquefy) return self.bdb.write(cb);
+
+              self.bdb.write(function(err) {
+                if(err) return cb(err);
+
+                cb(null, path);
+              });
+              return;
+            }
             
             var prevPath = data;
             
             // don't delete if it didn't move
             if(prevPath === path) { 
-              return self.bdb.write(cb);
+              if(!self.opts.uniquefy) return self.bdb.write(cb);
+
+              self.bdb.write(function(err) {
+                if(err) return cb(err);
+
+                cb(null, path);
+              });
+              return;
             }
             // this was a move so we need to delete the previous entry in idb
             self.idb.del(prevPath, function(err) {
@@ -306,7 +326,14 @@ function treeIndexer(db, idb, opts) {
               self._moveChildren(prevPath, path, function(err) {
                 if(err) return cb(err);
                 
-                self.bdb.write(cb);
+                if(!self.opts.uniquefy) return self.bdb.write(cb);
+
+                self.bdb.write(function(err) {
+                  if(err) return cb(err);
+
+                  cb(null, path);
+                });
+                return;
               });
             });
           })
@@ -416,6 +443,7 @@ function treeIndexer(db, idb, opts) {
     seen = seen || [];
 
     var parentKey = this._getParentKey(value);
+
     if(!parentKey) return cb(null, join(path.reverse(), this.opts.sep));
 
     // loop avoidance
@@ -703,7 +731,7 @@ function treeIndexer(db, idb, opts) {
   this.siblingsFromKey = function(key, cb) {
     // TODO
   };
-    
+  
 
   // check if descendant is a descendant of ancestor
   // ancestor and descendant are full paths to each element
@@ -858,6 +886,51 @@ function treeIndexer(db, idb, opts) {
   };
 
 
+  this._streamHelper = function(opts) {
+    
+    function pushOrCB(throughSelf, path, o, cb) {
+      if(opts.ignore && self._ignoreOutput(opts, o)) {
+        return cb();
+      }
+      if(!opts.match || self._match(opts, path, o, throughSelf.push.bind(throughSelf))) {
+        throughSelf.push(o);
+      }
+      cb();
+    }
+    var elements = 0;
+    if(opts.keys) elements++;
+    if(opts.paths) elements++;
+    if(opts.nicePaths) elements++;
+    if(opts.values) elements++;
+
+    var self = this;
+
+    if(elements == 1) {
+      return function(throughSelf, key, path, value, cb) {
+        if(opts.keys) {
+          pushOrCB(throughSelf, path, key, cb);
+        } else if(opts.paths) {
+          pushOrCB(throughSelf, path, path, cb);
+        } else if(opts.values) {
+          pushOrCB(throughSelf, path, value, cb);
+        } else {
+          pushOrCB(throughSelf, path, self.nicify(path), cb);
+        }
+      }
+    }
+
+    return function(throughSelf, key, path, value, cb) {
+      var o = {}
+      if(opts.keys) o.key = key;
+      if(opts.paths) o.path = path;
+      if(opts.values) o.value = value;
+      if(opts.nicePaths) o.nicePath = self.nicify(path);
+
+      pushOrCB(throughSelf, path, o, cb);
+    }
+
+  };
+
   this.stream = function(parentPath, opts) {
     if(parentPath && (typeof parentPath === 'object') && !(parentPath instanceof Array)) {
       opts = parentPath;
@@ -878,6 +951,7 @@ function treeIndexer(db, idb, opts) {
       // if more than one of paths, keys and values is true
       // then the stream will output objects with these as properties
       pathArray: undefined, // output the path as an array. defaults to level-tree-index constructor opts value
+      nicePaths: false, // output a copy of the path with uniquefy postfix stripped for each child
       gt: undefined, // specify gt directly, must then also specify lt or lte
       gte: undefined, // specify gte directly, must then also specify lt or lte
       lt: undefined, // specify lt directly, must then also specify gt or gte
@@ -947,6 +1021,7 @@ function treeIndexer(db, idb, opts) {
     }
 
     var self = this;
+    var helper = this._streamHelper(opts);
 
     var depth, o;
     var out = through.obj(function(data, enc, cb) {
@@ -965,70 +1040,14 @@ function treeIndexer(db, idb, opts) {
       }
       
       if(!opts.values) {
-        if(opts.paths && opts.keys) {
-          o = {
-            path: path,
-            key: key
-          };
-          if(opts.ignore && self._ignoreOutput(opts, o)) {
-            return cb();
-          }
-          if(!opts.match || self._match(opts, path, o, this.push.bind(this))) {
-            this.push(o);
-          }
-          return cb();
-        }
-        if(opts.keys) {
-          if(opts.ignore && self._ignoreOutput(opts, key)) {
-            return cb();
-          }
-          if(!opts.match || self._match(opts, path, key, this.push.bind(this))) {
-            this.push(key);
-          }
-          return cb();
-        }
-        if(opts.paths) {
-          if(opts.ignore && self._ignoreOutput(opts, path)) {
-            return cb();
-          }
-          if(!opts.match || self._match(opts, path, path, this.push.bind(this))) {
-            this.push(path);
-          }
-          return cb();
-        }
+        return helper(this, key, path, null, cb);
       }
 
       self.db.get(key, function(err, value) {
         if(err) return cb(err);
-        
-        if(!opts.paths && !opts.keys) {
-          if(opts.ignore && self._ignoreOutput(opts, value)) {
-            return cb();
-          }
-          if(!opts.match || self._match(opts, path, value, this.push.bind(this))) {
-            this.push(value);
-          }
-          return cb();
-        }
-        
-        o = {
-          value: value
-        };
-        
-        if(opts.paths) {
-          o.path = path;
-        }
-        if(opts.keys) {
-          o.key = key;
-        }
 
-        if(opts.ignore && self._ignoreOutput(opts, o)) {
-          return cb();
-        }
-        if(!opts.match || self._match(opts, path, o, this.push.bind(this))) {
-          this.push(o);
-        }
-        return cb();
+        return helper(this, key, path, value, cb);                
+
       }.bind(this));
     });
 
@@ -1094,7 +1113,7 @@ function treeIndexer(db, idb, opts) {
       cb = opts;
       opts = {};
     }
-;
+
     // if listening
     if(this.opts.listen) {    
       if(!cb) return this.db.del(key, opts);
@@ -1131,16 +1150,27 @@ function treeIndexer(db, idb, opts) {
     this.db.batch(ops, opts, function(err) {
       if(err) return cb(err);
 
+      var paths = [];
+
       async.eachSeries(ops, function(op, cb) {
         if(op.type === 'put') {
-          self._onPut(op.key, op.value, cb)
+          self._onPut(op.key, op.value, function(err, path) {
+            if(err) return cb(er);
+
+            if(path && self.opts.uniquefy) paths.push(path);
+          })
         } else { // del
           self._onDel(op.key, cb)
         }
       }, function(err) {
         if(err) return cb(err);
         
-        self.db.write(cb);
+        if(!self.opts.uniquefy) return self.db.write(cb);
+
+        self.db.write(function(err) {
+          if(err) return cb(err);
+          cb(null, paths);
+        });
       });
     });
   };
@@ -1216,6 +1246,27 @@ function treeIndexer(db, idb, opts) {
     }
 
     return db;
+  };
+
+  if(this.opts.uniqSep) {
+    // match the postfix on a path part added by uniquefy
+    this._uniqueRegex = new RegExp(this.opts.uniqSep+'.+$');
+  }
+
+  this._nicifyPart = function(pathPart) {
+    return pathPart.replace(this._uniqueRegex, '');
+  };
+
+  // remove the postfix added by uniquefy from a path or path part
+  this.nicify = function(path) {
+    if(!path || !this.opts.uniquefy) return path;
+
+    if(path instanceof Array) return map(this._nicifyPart.bind(this));
+    return path.split(this.opts.sep).map(this._nicifyPart.bind(this)).join('.');
+  };
+
+  this.getPathName = function(val) {
+    return this._getPathPart(val);
   };
 }
 

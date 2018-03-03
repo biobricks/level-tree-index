@@ -59,6 +59,9 @@ sep: 0x1f, // path separator. can be string or unicode/ascii character code
 pathArray: false, // for functions that output paths, output paths as arrays
 ignore: false, // set to a function to selectively ignore 
 listen: true, // listen for changes on db and update index automatically
+uniquefy: false, // add uniqueProp to end of pathProp to ensure uniqueness
+uniqProp: 'unique', // property used for uniqueness
+uniqSep: 0x1e, // like `sep` but separates pathProp from uniqProp
 levelup: false // if true, returns a levelup instance instead
 ```
 
@@ -282,6 +285,18 @@ If you need to wait for the tree index to update after a `.put` operation then y
 
 Allows you to wait for the tree index to finish building using a callback. Same as `.put` above but for deletion.
 
+# Uniqueness
+
+The way `level-tree-index` works requires that each indexed database entry has a globally unique path. In other words no two siblings can share the same `pathProp`.
+
+You might get into a situation where you really need multiple siblings with an identical `pathProp`. Then you might wonder if you coulds just append e.g. a random string to each `pathProp` before passing it to `level-tree-index` and then strip it away again before e.g. showing the data to users. 
+
+Well, `level-tree-index` provides helpers for exactly that. You can set `opts.uniquefy` to `true` in the constructor. You will then need database each entry to have a property that, combined with its `pathProp`, makes it unique. This can be as simple as a long randomly generated string. As with `pathProp` you will have to inform `level-tree-index` about this property with `uniqProp`. 
+
+You will then run into the problem that you no longer know the actual path names since they have the uniqueness added. You can either get the actual path name using the synchronous function `.getPathName(val)` where `val` is the value from the key-value pair for which you want the path. Or you can call `.put` or `.batch` directly on your `level-tree-index` instance and they will pass your callback a second argument which for `.put` is the actual path name and for `.batch` is an array of path names for all `put` operations.
+
+When `uniqefy` is turned on any functions returning paths will now be returning paths with the uniqueness data appended. You can use the convenience function `.nicify(path)` to convert these paths into normal paths without the uniqueness data. For `.stream` and any functions described as "same as .stream but ..." you can add set `opts.nicePaths` to true and in you will receive the nicified paths back with each result.
+
 # Async quirks
 
 Note that when you call .put, .del or .batch on your database level-tree-index will not be able to delay the callback so you cannot expect the tree index to be up to date when the callback is called. That is why you see the setTimeout used in the usage example above. You can instead call .put, .del or .batch directly on the level-tree-index instance and your callback will not be called until the index has finished building. This works but if `opts.listen` is set to true then an inefficient and inelegant workaround is used (in order to prevent the change listener from attempting to update the already updated index) which could potentially slow things down.
@@ -304,4 +319,4 @@ When running `.put` or `.del` directly on level-tree-index the operation is perf
 
 License: AGPLv3
 
-Copyright 2016, 2017 BioBricks foundation.
+Copyright 2016-2018 BioBricks foundation.
