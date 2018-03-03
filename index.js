@@ -168,8 +168,8 @@ function treeIndexer(db, idb, opts) {
   // TODO we're not actually using batchlevel
   this.db = db;
   this.bdb = batchlevel(idb);
-  this.idb = sublevel(idb, 'i'); // the index db
-  this.rdb = sublevel(idb, 'r'); // the reverse lookup db
+  this.idb = sublevel(this.bdb, 'i'); // the index db
+  this.rdb = sublevel(this.bdb, 'r'); // the reverse lookup db
 
   if(this.opts.listen && !this.opts.levelup) {
     this.c = changes(this.db);
