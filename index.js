@@ -321,7 +321,7 @@ function treeIndexer(db, idb, opts) {
     var self = this;
 
     this.rdb.get(key, function(err, path) {
-      if(err) return;
+      if(err) return cb(err);;
       
       self.idb.del(path, function(err) {
         if(err) return cb(err);
@@ -1094,11 +1094,11 @@ function treeIndexer(db, idb, opts) {
       cb = opts;
       opts = {};
     }
-
+;
     // if listening
     if(this.opts.listen) {    
       if(!cb) return this.db.del(key, opts);
-      this._ignore('del', key, value); // make listener ignore this next del
+      this._ignore('del', key); // make listener ignore this next del
     }
 
     var self = this;
