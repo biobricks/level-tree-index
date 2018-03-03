@@ -1,4 +1,4 @@
-var base = require('base');
+var base = require('./common/base.js');
 var tape = require('tape');
 
 //  Check if adding the separator character in the name screws things up

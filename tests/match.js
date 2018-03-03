@@ -1,4 +1,4 @@
-var base = require('base');
+var base = require('./common/base.js');
 var tape = require('tape');
 
 // TODO: opts.match could be a function or a

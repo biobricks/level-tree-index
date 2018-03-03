@@ -1,4 +1,4 @@
-var base = require('base');
+var base = require('./common/base.js');
 var tape = require('tape');
 
 function arrayFromPaths(nodes) {
