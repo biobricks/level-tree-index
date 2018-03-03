@@ -11,6 +11,7 @@ var async = require('async');
 var util = require('util');
 var levelup = require('levelup');
 var batchlevel = require('batchlevel');
+var uuid = require('uuid').v4;
 var AbstractLevelDOWN = require('abstract-leveldown').AbstractLevelDOWN;
 
 // hash an operation
@@ -134,7 +135,9 @@ function treeIndexer(db, idb, opts) {
   opts = xtend({
     pathProp: 'name', // property used to construct the path
     parentProp: 'parentKey', // property that references key of parent
+    uniquefy: false, // add uuid to end of pathProp to ensure uniqueness
     sep: 0x1f, // path separator (default is the ascii "unit separator")
+    endSep: 0x1e, // if uniquefy is truthy separates pathProp and uuid
     pathArray: false, // output the path as an array
     listen: true, // listen for changes on db and update index automatically
     levelup: false // if true, return a levelup wrapper
@@ -150,10 +153,16 @@ function treeIndexer(db, idb, opts) {
 
   this.opts = opts;
 
-  if(this.opts.sep.length < 1) throw new Error("Seperator cannot be zero length");
+  if(this.opts.sep.length < 1) throw new Error("Patah seperator cannot be zero length");
 
   if(typeof this.opts.sep === 'number') {
     this.opts.sep = String.fromCharCode(this.opts.sep);
+  }
+
+  if(this.opts.endSep.length < 1) throw new Error("End seperator cannot be zero length");
+
+  if(typeof this.opts.endSep === 'number') {
+    this.opts.endSep = String.fromCharCode(this.opts.endSep);
   }
 
   this.db = db;
@@ -227,9 +236,18 @@ function treeIndexer(db, idb, opts) {
 
   this._getPathPart = function(val) {
     var part = this._resolvePropPath(val, this.opts.pathProp);
-    // remove separator from the name
+    // remove path separator from the name
     if(part.indexOf(this.opts.sep) >= 0) {
       part = replace(part, this.opts.sep, '');
+    }
+
+    if(this.opts.uniquefy) {
+      // remove end separate from the name
+      if(part.indexOf(this.opts.endSep) >= 0) {
+        part = replace(part, this.opts.endSep, '');
+      }
+
+      part = part+this.opts.endSep+uuid();
     }
     return part;
   };
@@ -911,7 +929,7 @@ function treeIndexer(db, idb, opts) {
     }
 
     var s;
-    if(opts.gt || opts.gte) {
+    if(opts.gt || opts.gte || opts.lt || opts.lte) {
       var sOpts = {};
       if(opts.gt) {
         sOpts.gt = opts.gt;
@@ -923,12 +941,10 @@ function treeIndexer(db, idb, opts) {
       } else if(opts.lte) {
         sOpts.lte = opts.lte;
       }
-
       s = this.idb.createReadStream(sOpts);
     } else {
       s = this._childStream(parentPath);
     }
-   
 
     var self = this;
 
@@ -1202,6 +1218,8 @@ function treeIndexer(db, idb, opts) {
     return db;
   };
 }
+
+treeIndexer.lteKey = lteKey;
 
 module.exports = treeIndexer;
 
