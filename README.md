@@ -99,6 +99,17 @@ Limitations when using `levelup:true`:
 
 See `tests/levelup.js` for how to use the `levelup:true` mode.
 
+## .getRoot(cb)
+
+Get the path and key of the root element. E.g:
+
+```
+tree.getRoot(function(err, path, key) {
+  console.log("Path of root element:", path);
+  console.log("Key of root element:", key);
+});
+```
+
 ## .stream([parentPath], [opts])
 
 Recursively stream descendants starting from `parentPath`. If `parentPath` is falsy then the entire tree will be streamed to the specified depth.

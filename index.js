@@ -349,7 +349,7 @@ function treeIndexer(db, idb, opts) {
 
     this.rdb.get(key, function(err, path) {
       if(err) return cb(err);;
-      
+
       self.idb.del(path, function(err) {
         if(err) return cb(err);
 
@@ -930,6 +930,37 @@ function treeIndexer(db, idb, opts) {
     }
 
   };
+
+  this.getRoot = function(opts, cb) {
+    if(typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    var s = this.idb.createReadStream(opts);
+
+    var didCall = false;
+    s.on('data', function(data) {
+      if(!didCall) {
+        cb(null, data.key, data.value);
+      }
+      didCall = true;
+      s.destroy();
+    });
+    
+    s.on('error', function(err) {
+      if(!didCall) {
+        cb(err);
+        didCall = true;
+      }
+    });
+
+    s.on('end', function() {
+      if(!didCall) {
+        cb(null, null, null);
+        didCall = true;
+      }
+    });
+  }
 
   this.stream = function(parentPath, opts) {
     if(parentPath && (typeof parentPath === 'object') && !(parentPath instanceof Array)) {
