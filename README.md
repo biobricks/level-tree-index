@@ -63,6 +63,7 @@ uniquefy: false, // add uniqueProp to end of pathProp to ensure uniqueness
 uniqProp: 'unique', // property used for uniqueness
 uniqSep: 0x1e, // like `sep` but separates pathProp from uniqProp
 levelup: false // if true, returns a levelup instance instead
+orphanPath: 'orphans' // parent path of orphans
 ```
 
 Both `pathProp` and `parentProp` can be either a string, a buffer or a function. 
@@ -72,6 +73,8 @@ If a function is used then the function will be passed a value from your databas
 `opts.sep` can be a buffer of a string and is used as a separator to construct the path to each node in the tree.
 
 `opts.ignore` can be set to a function which will receive the key and value for each change and if it returns something truthy then that value will be ignored by the tree indexer, e.g:
+
+Setting `orphanPath` to a string, buffer or array will cause all orphaned rows to have `orphanPath` as their parent path. Setting `orphanPath` to `null` will cause orphaned rows to be ignored (not indexed). An orphan is defined as a row with its `parentProp` set to a non-falsy value but where the referenced parent does not exist in the database. This can happen e.g. if a parent is deleted but its children are left in the database.
 
 ```
 // ignore items where the .name property starts with an underscore

@@ -140,7 +140,12 @@ function treeIndexer(db, idb, opts) {
     uniqSep: 0x1e, // if uniquefy is truthy separates pathProp and uuid
     pathArray: false, // output the path as an array
     listen: true, // listen for changes on db and update index automatically
-    levelup: false // if true, return a levelup wrapper
+    levelup: false, // if true, return a levelup wrapper
+    orphanPath: 'orphans' // where should orphans show up?
+                          // if a string or buffer then place under that path.
+                          // if an empty string or buffer then move to root.
+                          // if `null` then don't index orphans
+                 
   }, opts || {});
 
   if(!(this instanceof treeIndexer)) {
@@ -153,7 +158,7 @@ function treeIndexer(db, idb, opts) {
 
   this.opts = opts;
 
-  if(this.opts.sep.length < 1) throw new Error("Patah seperator cannot be zero length");
+  if(this.opts.sep.length < 1) throw new Error("Path seperator cannot be zero length");
 
   if(typeof this.opts.sep === 'number') {
     this.opts.sep = String.fromCharCode(this.opts.sep);
@@ -165,7 +170,10 @@ function treeIndexer(db, idb, opts) {
 
   if(this.opts.uniqSep.length != 1) throw new Error("End seperator must be one character long");
 
-  // TODO we're not actually using batchlevel
+  if(this.opts.orphanPath && !(this.opts.orphanPath instanceof Array)) {
+    this.opts.orphanPath = split(this.opts.orphanPath, this.opts.sep);
+  }
+
   this.db = db;
   this.bdb = batchlevel(idb);
   this.idb = sublevel(this.bdb, 'i'); // the index db
@@ -282,6 +290,8 @@ function treeIndexer(db, idb, opts) {
     this._buildPath(value, function(err, path) {
       if(err) return cb(err);
 
+      if(!path) return cb();
+
       // was this a move? (does it already exist in index?
       self.rdb.get(key, function(revErr, data) {
         if(revErr && !revErr.notFound) return cb(revErr)
@@ -356,17 +366,10 @@ function treeIndexer(db, idb, opts) {
         self.rdb.del(key, function(err) {          
           if(err) return cb(err);
 
-          var newPath;
-          if(Buffer.isBuffer(path)) {
-            newPath = new Buffer();
-          } else {
-            newPath = '';
-          }
-          
-          // move children to be root nodes
-          self._moveChildren(path, newPath, function(err) {
+          // move children to orphanPath
+          self._moveChildren(path, self.opts.orphanPath, function(err) {
             if(err) return cb(err);
-
+            
             self.bdb.write(cb);
           });
         });
@@ -384,11 +387,17 @@ function treeIndexer(db, idb, opts) {
     });
   };
 
-  // update the tree indexes of all descendants (children, grand-children, etc.)
-  // based on the old and new path of a parent
+  // Update the tree indexes of all descendants (children, grand-children, etc.)
+  // based on the old and new path of a parent.
+  // If newPath === null then unindex all descendants.
   this._moveChildren = function(oldPath, newPath, cb) {
     cb = cb || function(){};
 
+    if(newPath instanceof Array) {
+      newPath = join(newPath, this.opts.sep);
+    }
+
+    // TODO support buffers
     if(oldPath === newPath) {
       process.nextTick(cb);
       return;
@@ -401,10 +410,19 @@ function treeIndexer(db, idb, opts) {
     s.on('data', function(data) {
 
       oldChildPath = data.key;
-      newChildPath = replace(data.key, oldPath, newPath);
-      this.idb.put(newChildPath, data.value);
-      this.rdb.put(data.value, newChildPath);
-      this.idb.del(oldChildPath);
+
+      if(newPath === null) {
+
+        this.idb.del(oldChildPath);
+        this.rdb.del(data.value)
+
+      } else {
+
+        newChildPath = replace(data.key, oldPath, newPath);
+        this.idb.put(newChildPath, data.value);
+        this.rdb.put(data.value, newChildPath);
+        this.idb.del(oldChildPath);
+      }
 
     }.bind(this));
 
@@ -435,6 +453,7 @@ function treeIndexer(db, idb, opts) {
   // the parent may not have been built by the time the child
   // path needs to be built.
   this._buildPath = function(value, path, cb, seen) {
+    var self = this;
     if(typeof path === 'function') {
       cb = path
       path = null;
@@ -454,14 +473,22 @@ function treeIndexer(db, idb, opts) {
     seen.push(parentKey);
 
     this.db.get(parentKey, function(err, value) {
-      if(err) return cb(err);
+      if(err && !err.notFound) return cb(err);
+      
+      if(err && err.notFound) {
+        if(self.opts.orphanPath === null) {
+          return cb(); // ignore
+        } else {
+          return cb(null, join(self.opts.orphanPath.concat(path), this.opts.sep));
+        }
+      }
 
       var pathPart = this._getPathPart(value);
       if(!pathPart) return cb(new Error("Object "+parentKey+" is missing its pathProp"))
-
+      
       path.push(pathPart);
       this._buildPath(value, path, cb, seen);
-      
+        
     }.bind(this));
   }
 
@@ -1034,7 +1061,7 @@ function treeIndexer(db, idb, opts) {
     }
 
     var s;
-    if(opts.gt || opts.gte || opts.lt || opts.lte) {
+    if(!parentPath || opts.gt || opts.gte || opts.lt || opts.lte) {
       var sOpts = {};
       if(opts.gt) {
         sOpts.gt = opts.gt;

@@ -10,6 +10,10 @@ function arrayFromPaths(nodes) {
   return arr
 }
 
+var opts = {
+  orphanPath: null
+};
+
 tape('delete', function(t) {
   base(function(err, db, tree, cb) {
     if(err) t.fail("initialization failed: " + err)
@@ -24,7 +28,7 @@ tape('delete', function(t) {
           'foo.bar.baz',
           'foo.bar.baz.wut',
           'foo.cat'
-        ],"objects as expected before move")
+        ],"objects as expected before del")
         tree.del('3', function(err) {
           if(err) t.fail("mysterious failure C: " + err)
           tree.children('foo', function(err, children) {
@@ -32,7 +36,7 @@ tape('delete', function(t) {
             t.deepEqual(arrayFromPaths(children),[
               'foo.bar',
               'foo.cat'
-            ],"objects as expected after move 1")
+            ],"objects as expected after del 1")
             tree.del('4', function(err) {
               if(err) t.fail("mysterious failure E: " + err)
               tree.children('foo', function(err, children) {
@@ -40,18 +44,19 @@ tape('delete', function(t) {
 
                 t.deepEqual(arrayFromPaths(children),[
                   'foo.bar'
-                ], "objects as expected after move 2")
+                ], "objects as expected after del 2")
 
                 tree.del('8', function(err) {
                   if(!err) t.fail(".del did not fail when it should");
 
-                  tree.children('orphans', function(err, children) {
+                  tree.children(null, function(err, children) {
                     if(err) t.fail("mysterious failure G: " + err)
 
-                    t.deepEqual(arrayFromPaths(children),[
-                      'orphans.wut'
-                    ], "orphans as expected")
-
+                    t.deepEqual(arrayFromPaths(children), [
+                      'foo',
+                      'foo.bar'
+                    ], "no orphans as expected after del")
+                    
                     t.end();
                   });
                 })
@@ -61,5 +66,5 @@ tape('delete', function(t) {
         })
       })
     })
-  })
+  }, opts)
 })
